@@ -1,0 +1,37 @@
+{
+  "name": "@askrjs/auth",
+  "version": "0.0.1",
+  "description": "Shared authentication contracts and request auth resolution for Askr",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./jwt": {
+      "types": "./dist/jwt.d.ts",
+      "import": "./dist/jwt.js"
+    },
+    "./oidc": {
+      "types": "./dist/oidc.d.ts",
+      "import": "./dist/oidc.js"
+    }
+  },
+  "files": ["dist/**/*.js", "dist/**/*.d.ts"],
+  "scripts": {
+    "build": "vp pack",
+    "lint": "vp lint src tests && npm run typecheck",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vp test run -c vitest.config.ts",
+    "check": "npm run lint && npm test && npm run build",
+    "prepublishOnly": "npm run check"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.0",
+    "vite-plus": "^0.2.4",
+    "vitest": "^4.0.0"
+  },
+  "engines": { "node": ">=18" }
+}
