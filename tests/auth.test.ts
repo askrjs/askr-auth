@@ -65,7 +65,9 @@ describe("OIDC client", () => {
     expect(url.searchParams.get("state")).toBe("state-1");
     expect(url.searchParams.get("nonce")).toBe("nonce-1");
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
-    expect(url.searchParams.get("code_challenge")).toBe("JBbiqONGWPaAmwXk_8bT6UnlPfrn65D32eZlJS-zGG0");
+    expect(url.searchParams.get("code_challenge")).toBe(
+      "JBbiqONGWPaAmwXk_8bT6UnlPfrn65D32eZlJS-zGG0",
+    );
     expect(request.state).toBe("state-1");
     expect(request.codeVerifier).toBe("test-verifier");
   });
@@ -77,12 +79,15 @@ describe("OIDC client", () => {
         return new Response(JSON.stringify(oidcMetadata), { status: 200 });
       }
       tokenInit = init;
-      return new Response(JSON.stringify({
-        access_token: "access-1",
-        id_token: "id-token-1",
-        token_type: "Bearer",
-        expires_in: 300,
-      }), { status: 200 });
+      return new Response(
+        JSON.stringify({
+          access_token: "access-1",
+          id_token: "id-token-1",
+          token_type: "Bearer",
+          expires_in: 300,
+        }),
+        { status: 200 },
+      );
     };
     const client = createOidcClient({
       issuer: "https://login.example.test",
@@ -91,17 +96,21 @@ describe("OIDC client", () => {
       fetch,
     });
 
-    await expect(client.exchangeCode({
-      code: "code-1",
-      codeVerifier: "test-verifier",
-    })).resolves.toEqual({
+    await expect(
+      client.exchangeCode({
+        code: "code-1",
+        codeVerifier: "test-verifier",
+      }),
+    ).resolves.toEqual({
       access_token: "access-1",
       id_token: "id-token-1",
       token_type: "Bearer",
       expires_in: 300,
     });
     expect(tokenInit?.method).toBe("POST");
-    expect(tokenInit?.headers).toMatchObject({ "content-type": "application/x-www-form-urlencoded" });
+    expect(tokenInit?.headers).toMatchObject({
+      "content-type": "application/x-www-form-urlencoded",
+    });
     const body = new URLSearchParams(String(tokenInit?.body));
     expect(Object.fromEntries(body)).toEqual({
       grant_type: "authorization_code",
@@ -113,21 +122,25 @@ describe("OIDC client", () => {
   });
 
   it("should require the authorization request nonce in the validated ID token", async () => {
-    await expect(validateOidcIdToken(token({ ...validPayload, nonce: "nonce-1" }), {
-      issuer: validPayload.iss,
-      audience: validPayload.aud,
-      nonce: "nonce-1",
-      jwks,
-      clock: () => now,
-    })).resolves.toMatchObject({ id: "user-1", nonce: "nonce-1" });
+    await expect(
+      validateOidcIdToken(token({ ...validPayload, nonce: "nonce-1" }), {
+        issuer: validPayload.iss,
+        audience: validPayload.aud,
+        nonce: "nonce-1",
+        jwks,
+        clock: () => now,
+      }),
+    ).resolves.toMatchObject({ id: "user-1", nonce: "nonce-1" });
 
-    await expect(validateOidcIdToken(token({ ...validPayload, nonce: "wrong" }), {
-      issuer: validPayload.iss,
-      audience: validPayload.aud,
-      nonce: "nonce-1",
-      jwks,
-      clock: () => now,
-    })).rejects.toMatchObject({ code: "invalid_claim" });
+    await expect(
+      validateOidcIdToken(token({ ...validPayload, nonce: "wrong" }), {
+        issuer: validPayload.iss,
+        audience: validPayload.aud,
+        nonce: "nonce-1",
+        jwks,
+        clock: () => now,
+      }),
+    ).rejects.toMatchObject({ code: "invalid_claim" });
   });
 
   it("should authenticate a confidential client at the token endpoint", async () => {
@@ -166,9 +179,10 @@ function token(payload: Record<string, unknown>, kid = "key-1", algorithm = "RS2
   const header = base64url(JSON.stringify({ alg: algorithm, kid, typ: "JWT" }));
   const body = base64url(JSON.stringify(payload));
   const input = `${header}.${body}`;
-  const signature = algorithm === "none"
-    ? ""
-    : sign("RSA-SHA256", Buffer.from(input), keyPair.privateKey).toString("base64url");
+  const signature =
+    algorithm === "none"
+      ? ""
+      : sign("RSA-SHA256", Buffer.from(input), keyPair.privateKey).toString("base64url");
   return `${input}.${signature}`;
 }
 
@@ -244,7 +258,10 @@ describe("JWT resource server", () => {
       jwks: async () => jwks,
       clock: () => now,
     });
-    await expect(validator.validate(token(validPayload, "key-1"))).resolves.toHaveProperty("id", "user-1");
+    await expect(validator.validate(token(validPayload, "key-1"))).resolves.toHaveProperty(
+      "id",
+      "user-1",
+    );
   });
 
   it("should resolve a bearer access token into the shared auth context", async () => {
@@ -308,9 +325,8 @@ describe("shared auth resolution", () => {
   it("should resolve opaque browser sessions", async () => {
     const auth = createAuth({
       sessions: {
-        get: async (id) => id === "s-1"
-          ? { id, subject: "user-1", expiresAt: Date.now() + 60_000 }
-          : null,
+        get: async (id) =>
+          id === "s-1" ? { id, subject: "user-1", expiresAt: Date.now() + 60_000 } : null,
       },
       principals: { get: async (subject) => ({ id: subject, roles: ["admin"] }) },
     });
@@ -336,7 +352,9 @@ describe("shared auth resolution", () => {
     });
     const [one, two] = await Promise.all([
       auth.resolve(request("https://one.example.test/")),
-      auth.resolve(new Request("https://two.example.test/", { headers: { cookie: "session=s-2" } })),
+      auth.resolve(
+        new Request("https://two.example.test/", { headers: { cookie: "session=s-2" } }),
+      ),
     ]);
     expect(one.principal?.id).toBe("s-1");
     expect(two.principal?.id).toBe("s-2");
@@ -351,9 +369,15 @@ describe("shared auth resolution", () => {
       scopes: ["users:read"],
     };
     await expect(Promise.resolve(requireUser()(context))).resolves.toEqual({ allowed: true });
-    await expect(Promise.resolve(requireRole("admin")(context))).resolves.toEqual({ allowed: true });
-    await expect(Promise.resolve(requirePermission("users:read")(context))).resolves.toEqual({ allowed: true });
-    await expect(Promise.resolve(requireScope("users:read")(context))).resolves.toEqual({ allowed: true });
+    await expect(Promise.resolve(requireRole("admin")(context))).resolves.toEqual({
+      allowed: true,
+    });
+    await expect(Promise.resolve(requirePermission("users:read")(context))).resolves.toEqual({
+      allowed: true,
+    });
+    await expect(Promise.resolve(requireScope("users:read")(context))).resolves.toEqual({
+      allowed: true,
+    });
   });
 
   it("should return unauthenticated given requireUser and anonymous context", async () => {
@@ -402,7 +426,11 @@ describe("shared auth resolution", () => {
       session: null,
       tenant: null,
     };
-    await expect(Promise.resolve(allOf(requireUser(), requireRole("admin"))(context))).resolves.toEqual({ allowed: true });
-    await expect(Promise.resolve(anyOf(requirePermission("write"), requireRole("admin"))(context))).resolves.toEqual({ allowed: true });
+    await expect(
+      Promise.resolve(allOf(requireUser(), requireRole("admin"))(context)),
+    ).resolves.toEqual({ allowed: true });
+    await expect(
+      Promise.resolve(anyOf(requirePermission("write"), requireRole("admin"))(context)),
+    ).resolves.toEqual({ allowed: true });
   });
 });

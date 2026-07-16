@@ -8,7 +8,12 @@ describe("package architecture", () => {
   it("should keep public index barrels re-export only", () => {
     for (const file of ["src/index.ts", "src/jwt.ts", "src/oidc.ts"]) {
       const source = readFileSync(resolve(root, file), "utf8");
-      expect(source.split("\n").filter(Boolean).every((line) => line.startsWith("export "))).toBe(true);
+      expect(
+        source
+          .split("\n")
+          .filter(Boolean)
+          .every((line) => line.startsWith("export ")),
+      ).toBe(true);
     }
   });
 
@@ -30,7 +35,10 @@ describe("package architecture", () => {
       "src/oidc-types.ts",
       "src/requirements.ts",
     ]) {
-      expect(readFileSync(resolve(root, file), "utf8").split("\n").length, file).toBeLessThanOrEqual(300);
+      expect(
+        readFileSync(resolve(root, file), "utf8").split("\n").length,
+        file,
+      ).toBeLessThanOrEqual(300);
     }
   });
 });

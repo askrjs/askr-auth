@@ -29,5 +29,7 @@ export type AuthDecision =
       reason: "unauthenticated" | "forbidden" | "already_authenticated";
     };
 
-export type AuthRequirement<P extends Principal = Principal, S extends AuthSession = AuthSession> =
-  (context: AuthContext<P, S>) => AuthDecision | PromiseLike<AuthDecision>;
+export type AuthRequirement<
+  P extends Principal = Principal,
+  S extends AuthSession = AuthSession,
+> = (context: AuthContext<P, S>) => AuthDecision | PromiseLike<AuthDecision>;

@@ -2,12 +2,29 @@
   "name": "@askrjs/auth",
   "version": "0.0.1",
   "description": "Shared authentication contracts and request auth resolution for Askr",
-  "keywords": ["askr", "authentication", "authorization", "oidc"],
+  "keywords": [
+    "askr",
+    "authentication",
+    "authorization",
+    "oidc"
+  ],
   "homepage": "https://github.com/askrjs/askr-auth#readme",
-  "bugs": { "url": "https://github.com/askrjs/askr-auth/issues" },
-  "repository": { "type": "git", "url": "git+https://github.com/askrjs/askr-auth.git" },
-  "author": { "name": "askrjs", "url": "https://github.com/askrjs" },
+  "bugs": {
+    "url": "https://github.com/askrjs/askr-auth/issues"
+  },
   "license": "Apache-2.0",
+  "author": {
+    "name": "askrjs",
+    "url": "https://github.com/askrjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/askrjs/askr-auth.git"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -26,8 +43,9 @@
     },
     "./package.json": "./package.json"
   },
-  "files": ["dist/**/*.js", "dist/**/*.d.ts"],
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "vp pack",
     "lint": "vp lint src tests && npm run typecheck",
@@ -45,5 +63,7 @@
     "vite-plus": "^0.2.4",
     "vitest": "^4.0.0"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  }
 }

@@ -5,6 +5,12 @@ export function randomString(length = 32): string {
 }
 
 export async function codeChallenge(verifier: string): Promise<string> {
-  const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
-  return btoa(String.fromCharCode(...new Uint8Array(digest))).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+  const digest = await globalThis.crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(verifier),
+  );
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replaceAll("=", "");
 }

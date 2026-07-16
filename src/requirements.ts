@@ -17,8 +17,7 @@ export function requireUser(): AuthRequirement {
 }
 
 export function requireAnonymous(): AuthRequirement {
-  return (context) =>
-    context.authenticated ? denied("already_authenticated") : allowed;
+  return (context) => (context.authenticated ? denied("already_authenticated") : allowed);
 }
 
 function includes(value: unknown, expected: string): boolean {
