@@ -11,6 +11,6 @@ export default defineConfig({
     outDir: "dist",
     platform: "neutral",
     dts: true,
-    sourcemap: true,
+    sourcemap: "hidden",
   },
 });
