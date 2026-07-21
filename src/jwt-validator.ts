@@ -1,6 +1,7 @@
 import { audienceMatches, claimTime, normalizePrincipal } from "./jwt-claims";
 import { decodeBase64Url, decodeJson } from "./jwt-encoding";
 import { JwtValidationError } from "./jwt-error";
+import { resolveJwtAlgorithm } from "./jwt-algorithm";
 import type { Principal } from "./model";
 import type {
   JwtValidator,
@@ -20,8 +21,11 @@ export function createJwtValidator(options: JwtValidatorOptions): JwtValidator {
         throw new JwtValidationError("malformed_token", "JWT must have three segments.");
       const header = decodeJson(parts[0]);
       const payload = decodeJson(parts[1]);
-      if (header.alg !== "RS256")
-        throw new JwtValidationError("unsupported_algorithm", "Only RS256 JWTs are accepted.");
+      if (header.alg !== "RS256" && header.alg !== "ES256")
+        throw new JwtValidationError(
+          "unsupported_algorithm",
+          "Only RS256 and ES256 JWTs are accepted.",
+        );
       if (typeof header.kid !== "string" || !header.kid)
         throw new JwtValidationError("unknown_key", "JWT kid header is required.");
       if (!cachedKeys) {
@@ -30,17 +34,31 @@ export function createJwtValidator(options: JwtValidatorOptions): JwtValidator {
       }
       const key = cachedKeys.keys.find((candidate) => candidate.kid === header.kid);
       if (!key) throw new JwtValidationError("unknown_key", "JWT signing key was not found.");
+      let algorithm;
+      try {
+        algorithm = resolveJwtAlgorithm(key);
+      } catch {
+        throw new JwtValidationError(
+          "unsupported_algorithm",
+          "JWT signing key uses an unsupported algorithm.",
+        );
+      }
+      if (header.alg !== algorithm.jwt)
+        throw new JwtValidationError(
+          "unsupported_algorithm",
+          "JWT header algorithm does not match its signing key.",
+        );
       let valid = false;
       try {
         const imported = await globalThis.crypto.subtle.importKey(
           "jwk",
           key,
-          { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+          algorithm.import,
           false,
           ["verify"],
         );
         valid = await globalThis.crypto.subtle.verify(
-          { name: "RSASSA-PKCS1-v1_5" },
+          algorithm.operation,
           imported,
           Uint8Array.from(decodeBase64Url(parts[2]), (char) => char.charCodeAt(0)),
           new TextEncoder().encode(`${parts[0]}.${parts[1]}`),

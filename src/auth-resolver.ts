@@ -30,7 +30,11 @@ export function createAuth<P extends Principal = Principal, S extends AuthSessio
       if (options.jwt && authorization?.startsWith("Bearer ")) {
         const token = authorization.slice("Bearer ".length).trim();
         if (!token) return context;
-        const principal = await options.jwt.validate(token);
+        const validated = await options.jwt.validate(token);
+        const principal = options.principals
+          ? await options.principals.get(validated.subject ?? validated.id, { request, signal })
+          : validated;
+        if (!principal) return context;
         const claim = principal.scope;
         const scopes =
           typeof claim === "string"
@@ -50,7 +54,11 @@ export function createAuth<P extends Principal = Principal, S extends AuthSessio
         options.jwtCookie && readCookie(request.headers.get("cookie"), options.jwtCookie.name);
       if (options.jwtCookie && jwtCookie) {
         try {
-          const principal = await options.jwtCookie.validator.validate(jwtCookie);
+          const validated = await options.jwtCookie.validator.validate(jwtCookie);
+          const principal = options.principals
+            ? await options.principals.get(validated.subject ?? validated.id, { request, signal })
+            : validated;
+          if (!principal) return context;
           return { authenticated: true, principal, session: null, tenant: context.tenant };
         } catch (error) {
           if (!(error instanceof JwtValidationError)) throw error;

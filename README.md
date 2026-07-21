@@ -5,6 +5,9 @@
 
 Shared authentication contracts, JWT and OIDC primitives, and request authentication resolution for Askr.
 
+JWT issuance and validation support RS256 with RSA keys and ES256 with EC P-256 keys. A JWK's
+`alg` may be omitted and inferred from its key shape; when present, it must match the key.
+
 ## Install
 
 ```sh

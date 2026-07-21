@@ -1,4 +1,5 @@
 import { createJwtValidator } from "./jwt-validator";
+import { resolveJwtAlgorithm } from "./jwt-algorithm";
 import type { AskrJsonWebKey, JwtIssuer, JwtIssuerOptions } from "./jwt-types";
 
 const reserved = new Set(["id", "sub", "iss", "aud", "iat", "exp", "jti", "nbf", "alg", "kid"]);
@@ -13,6 +14,7 @@ const encodeBase64Url = (value: string) => encodeBytes(bytes(value));
 export function createJwtIssuer(options: JwtIssuerOptions): JwtIssuer {
   if (!options.kid || !options.issuer || options.ttlSeconds <= 0)
     throw new TypeError("JWT issuer configuration is invalid.");
+  const algorithm = resolveJwtAlgorithm(options.privateKey);
   const publicKey: AskrJsonWebKey = { ...options.privateKey };
   delete publicKey.d;
   delete publicKey.p;
@@ -20,8 +22,10 @@ export function createJwtIssuer(options: JwtIssuerOptions): JwtIssuer {
   delete publicKey.dp;
   delete publicKey.dq;
   delete publicKey.qi;
+  delete publicKey.oth;
+  publicKey.key_ops = ["verify"];
   publicKey.kid = options.kid;
-  publicKey.alg = "RS256";
+  publicKey.alg = algorithm.jwt;
   publicKey.use = "sig";
   const validator = createJwtValidator({
     issuer: options.issuer,
@@ -37,7 +41,7 @@ export function createJwtIssuer(options: JwtIssuerOptions): JwtIssuer {
         if (reserved.has(key)) throw new TypeError(`JWT claim ${key} is framework-owned.`);
       const now = (options.clock ?? (() => Math.floor(Date.now() / 1000)))();
       const header = encodeBase64Url(
-        JSON.stringify({ alg: "RS256", typ: "JWT", kid: options.kid }),
+        JSON.stringify({ alg: algorithm.jwt, typ: "JWT", kid: options.kid }),
       );
       const payload = encodeBase64Url(
         JSON.stringify({
@@ -53,12 +57,12 @@ export function createJwtIssuer(options: JwtIssuerOptions): JwtIssuer {
       const key = await crypto.subtle.importKey(
         "jwk",
         options.privateKey,
-        { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+        algorithm.import,
         false,
         ["sign"],
       );
       const signature = await crypto.subtle.sign(
-        "RSASSA-PKCS1-v1_5",
+        algorithm.operation,
         key,
         bytes(`${header}.${payload}`),
       );

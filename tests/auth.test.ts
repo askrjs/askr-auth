@@ -12,7 +12,7 @@ import {
   type AuthContext,
   type Principal,
 } from "../src";
-import { createJwtValidator, validateOidcIdToken } from "../src/jwt";
+import { createJwtIssuer, createJwtValidator, validateOidcIdToken } from "../src/jwt";
 import { createOidcClient } from "../src/oidc";
 
 const oidcMetadata = {
@@ -281,6 +281,131 @@ describe("JWT resource server", () => {
       principal: { id: "user-1", subject: "user-1" },
       session: null,
       scopes: ["openid", "profile", "users:read"],
+    });
+  });
+
+  it("should enrich a bearer principal through the configured principal store", async () => {
+    const validator = createJwtValidator({ issuer: validPayload.iss, jwks, clock: () => now });
+    const auth = createAuth({
+      jwt: validator,
+      principals: {
+        get: async (subject) => ({
+          id: subject,
+          subject,
+          roles: ["admin"],
+          permissions: ["users:write"],
+        }),
+      },
+    });
+    const bearerRequest = new Request("https://api.example.test/users", {
+      headers: { authorization: `Bearer ${token(validPayload)}` },
+    });
+
+    await expect(auth.resolve(bearerRequest)).resolves.toMatchObject({
+      authenticated: true,
+      principal: { id: "user-1", permissions: ["users:write"] },
+    });
+  });
+});
+
+describe("JWT issuer algorithms", () => {
+  const issuerOptions = {
+    kid: "issuer-key",
+    issuer: validPayload.iss,
+    audience: validPayload.aud,
+    ttlSeconds: 300,
+    clock: () => now,
+  };
+
+  it("should preserve RS256 issuance and validation", async () => {
+    const privateKey = keyPair.privateKey.export({ format: "jwk" });
+    const issuer = createJwtIssuer({ ...issuerOptions, privateKey });
+    const issued = await issuer.issue({ subject: "rsa-user" });
+
+    expect(JSON.parse(Buffer.from(issued.split(".")[0], "base64url").toString())).toMatchObject({
+      alg: "RS256",
+    });
+    await expect(issuer.validator.validate(issued)).resolves.toMatchObject({ id: "rsa-user" });
+  });
+
+  it("should issue and validate ES256 with a Web Crypto P-256 key", async () => {
+    const pair = (await crypto.subtle.generateKey(
+      { name: "ECDSA", namedCurve: "P-256" },
+      true,
+      ["sign", "verify"],
+    )) as CryptoKeyPair;
+    const privateKey = await crypto.subtle.exportKey("jwk", pair.privateKey);
+    expect(privateKey.key_ops).toEqual(["sign"]);
+    const issuer = createJwtIssuer({ ...issuerOptions, privateKey });
+    const issued = await issuer.issue({ subject: "ec-user", roles: ["admin"] });
+
+    expect(JSON.parse(Buffer.from(issued.split(".")[0], "base64url").toString())).toMatchObject({
+      alg: "ES256",
+    });
+    expect(Buffer.from(issued.split(".")[2], "base64url")).toHaveLength(64);
+    await expect(issuer.validator.validate(issued)).resolves.toMatchObject({
+      id: "ec-user",
+      roles: ["admin"],
+    });
+  });
+
+  it("should validate ES256 from a public JWKS and reject an invalid signature", async () => {
+    const ecPair = generateKeyPairSync("ec", { namedCurve: "P-256" });
+    const publicKey = ecPair.publicKey.export({ format: "jwk" });
+    const header = base64url(JSON.stringify({ alg: "ES256", kid: "ec-key", typ: "JWT" }));
+    const body = base64url(JSON.stringify(validPayload));
+    const input = `${header}.${body}`;
+    const signature = sign("SHA256", Buffer.from(input), {
+      key: ecPair.privateKey,
+      dsaEncoding: "ieee-p1363",
+    }).toString("base64url");
+    const validator = createJwtValidator({
+      issuer: validPayload.iss,
+      audience: validPayload.aud,
+      jwks: { keys: [{ ...publicKey, kid: "ec-key" }] },
+      clock: () => now,
+    });
+
+    await expect(validator.validate(`${input}.${signature}`)).resolves.toHaveProperty("id", "user-1");
+    const invalid = `${input}.${signature[0] === "A" ? "B" : "A"}${signature.slice(1)}`;
+    await expect(validator.validate(invalid)).rejects.toMatchObject({ code: "invalid_signature" });
+  });
+
+  it.each([
+    ["RS256", { kty: "EC", crv: "P-256", x: "x", y: "y", kid: "mixed" }],
+    ["ES256", { ...jwk, kid: "mixed" }],
+  ])("should reject %s headers paired with a different key shape", async (alg, mixedKey) => {
+    const validator = createJwtValidator({
+      issuer: validPayload.iss,
+      jwks: { keys: [mixedKey] },
+      clock: () => now,
+    });
+    await expect(validator.validate(token(validPayload, "mixed", alg))).rejects.toMatchObject({
+      code: "unsupported_algorithm",
+    });
+  });
+
+  it("should reject unsupported curves and conflicting JWK algorithm metadata", async () => {
+    expect(() =>
+      createJwtIssuer({
+        ...issuerOptions,
+        privateKey: { kty: "EC", crv: "P-384", d: "d", x: "x", y: "y" },
+      }),
+    ).toThrow(TypeError);
+    expect(() =>
+      createJwtIssuer({
+        ...issuerOptions,
+        privateKey: { ...keyPair.privateKey.export({ format: "jwk" }), alg: "ES256" },
+      }),
+    ).toThrow(TypeError);
+
+    const validator = createJwtValidator({
+      issuer: validPayload.iss,
+      jwks: { keys: [{ ...jwk, kid: "conflict", alg: "ES256" }] },
+      clock: () => now,
+    });
+    await expect(validator.validate(token(validPayload, "conflict"))).rejects.toMatchObject({
+      code: "unsupported_algorithm",
     });
   });
 });
