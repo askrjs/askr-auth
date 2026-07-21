@@ -5,8 +5,8 @@ import { describe, expect, it } from "vitest";
 const root = resolve(import.meta.dirname, "..");
 
 describe("package architecture", () => {
-  it("should keep public index barrels re-export only", () => {
-    for (const file of ["src/index.ts", "src/jwt.ts", "src/oidc.ts"]) {
+  it("should give the expected result when keep public index barrels re-export only", () => {
+    for (const file of ["src/index.ts", "src/jwt.ts", "src/oidc.ts", "src/saml.ts"]) {
       const source = readFileSync(resolve(root, file), "utf8");
       expect(
         source
@@ -17,7 +17,7 @@ describe("package architecture", () => {
     }
   });
 
-  it("should keep production modules within the clean-break size limit", () => {
+  it("should give the expected result when keep production modules within the clean-break size limit", () => {
     for (const file of [
       "src/auth-cookie.ts",
       "src/auth-resolver.ts",
@@ -34,6 +34,13 @@ describe("package architecture", () => {
       "src/oidc-token.ts",
       "src/oidc-types.ts",
       "src/requirements.ts",
+      "src/saml-client.ts",
+      "src/saml-crypto.ts",
+      "src/saml-dom.ts",
+      "src/saml-metadata.ts",
+      "src/saml-request.ts",
+      "src/saml-response.ts",
+      "src/saml-types.ts",
     ]) {
       expect(
         readFileSync(resolve(root, file), "utf8").split("\n").length,

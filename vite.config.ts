@@ -6,6 +6,7 @@ export default defineConfig({
       index: "src/index.ts",
       jwt: "src/jwt.ts",
       oidc: "src/oidc.ts",
+      saml: "src/saml.ts",
     },
     format: ["esm"],
     outDir: "dist",

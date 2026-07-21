@@ -6,7 +6,8 @@
     "askr",
     "authentication",
     "authorization",
-    "oidc"
+    "oidc",
+    "saml"
   ],
   "homepage": "https://github.com/askrjs/askr-auth#readme",
   "bugs": {
@@ -41,6 +42,10 @@
       "types": "./dist/oidc.d.ts",
       "import": "./dist/oidc.js"
     },
+    "./saml": {
+      "types": "./dist/saml.d.ts",
+      "import": "./dist/saml.js"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -58,6 +63,7 @@
     "prepublishOnly": "npm run check"
   },
   "devDependencies": {
+    "@types/node": "^26.1.1",
     "publint": "^0.3.21",
     "typescript": "^6.0.0",
     "vite-plus": "^0.2.4",
@@ -65,5 +71,10 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "@xmldom/xmldom": "0.8.13",
+    "xml-crypto": "6.1.2",
+    "xml-encryption": "5.0.0"
   }
 }

@@ -31,7 +31,7 @@ const oidcFetch = async (input: RequestInfo | URL) => {
 };
 
 describe("OIDC client", () => {
-  it("should discover an external OIDC provider from its issuer", async () => {
+  it("should give the expected result when discover an external OIDC provider from its issuer", async () => {
     const client = createOidcClient({
       issuer: "https://login.example.test",
       clientId: "askr-client",
@@ -42,7 +42,7 @@ describe("OIDC client", () => {
     await expect(client.discover()).resolves.toEqual(oidcMetadata);
   });
 
-  it("should create an authorization-code PKCE request with state and nonce", async () => {
+  it("should give the expected result when create an authorization-code PKCE request with state and nonce", async () => {
     const client = createOidcClient({
       issuer: "https://login.example.test",
       clientId: "askr-client",
@@ -72,7 +72,7 @@ describe("OIDC client", () => {
     expect(request.codeVerifier).toBe("test-verifier");
   });
 
-  it("should exchange an authorization code with PKCE parameters for tokens", async () => {
+  it("should give the expected result when exchange an authorization code with PKCE parameters for tokens", async () => {
     let tokenInit: RequestInit | undefined;
     const fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input).endsWith("openid-configuration")) {
@@ -121,7 +121,7 @@ describe("OIDC client", () => {
     });
   });
 
-  it("should require the authorization request nonce in the validated ID token", async () => {
+  it("should give the expected result when require the authorization request nonce in the validated ID token", async () => {
     await expect(
       validateOidcIdToken(token({ ...validPayload, nonce: "nonce-1" }), {
         issuer: validPayload.iss,
@@ -143,7 +143,7 @@ describe("OIDC client", () => {
     ).rejects.toMatchObject({ code: "invalid_claim" });
   });
 
-  it("should authenticate a confidential client at the token endpoint", async () => {
+  it("should give the expected result when authenticate a confidential client at the token endpoint", async () => {
     let tokenInit: RequestInit | undefined;
     const fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input).endsWith("openid-configuration")) {
@@ -199,7 +199,7 @@ const validPayload = {
 };
 
 describe("JWT resource server", () => {
-  it("should validate a signed RS256 access token and normalize its principal", async () => {
+  it("should give the expected result when validate a signed RS256 access token and normalize its principal", async () => {
     const validator = createJwtValidator({
       issuer: validPayload.iss,
       audience: validPayload.aud,
@@ -216,7 +216,7 @@ describe("JWT resource server", () => {
     });
   });
 
-  it("should reject a token with an invalid signature", async () => {
+  it("should give the expected result when reject a token with an invalid signature", async () => {
     const validator = createJwtValidator({ issuer: validPayload.iss, jwks, clock: () => now });
     const signed = token(validPayload).split(".");
     signed[2] = `${signed[2][0] === "A" ? "B" : "A"}${signed[2].slice(1)}`;
@@ -230,7 +230,7 @@ describe("JWT resource server", () => {
     ["expiration", { exp: now - 1 }],
     ["not-before", { nbf: now + 1 }],
     ["issued-at", { iat: now + 1 }],
-  ])("should reject a token with an invalid %s claim", async (_name, change) => {
+  ])("should give the expected result when reject a token with an invalid %s claim", async (_name, change) => {
     const validator = createJwtValidator({
       issuer: validPayload.iss,
       audience: validPayload.aud,
@@ -242,7 +242,7 @@ describe("JWT resource server", () => {
     });
   });
 
-  it("should reject alg none and unknown key ids", async () => {
+  it("should give the expected result when reject alg none and unknown key ids", async () => {
     const validator = createJwtValidator({ issuer: validPayload.iss, jwks, clock: () => now });
     await expect(validator.validate(token(validPayload, "key-1", "none"))).rejects.toMatchObject({
       code: "unsupported_algorithm",
@@ -252,7 +252,7 @@ describe("JWT resource server", () => {
     });
   });
 
-  it("should resolve a rotated key through a key provider", async () => {
+  it("should give the expected result when resolve a rotated key through a key provider", async () => {
     const validator = createJwtValidator({
       issuer: validPayload.iss,
       jwks: async () => jwks,
@@ -264,7 +264,7 @@ describe("JWT resource server", () => {
     );
   });
 
-  it("should resolve a bearer access token into the shared auth context", async () => {
+  it("should give the expected result when resolve a bearer access token into the shared auth context", async () => {
     const validator = createJwtValidator({
       issuer: validPayload.iss,
       audience: validPayload.aud,
@@ -284,7 +284,7 @@ describe("JWT resource server", () => {
     });
   });
 
-  it("should enrich a bearer principal through the configured principal store", async () => {
+  it("should give the expected result when enrich a bearer principal through the configured principal store", async () => {
     const validator = createJwtValidator({ issuer: validPayload.iss, jwks, clock: () => now });
     const auth = createAuth({
       jwt: validator,
@@ -317,7 +317,7 @@ describe("JWT issuer algorithms", () => {
     clock: () => now,
   };
 
-  it("should preserve RS256 issuance and validation", async () => {
+  it("should give the expected result when preserve RS256 issuance and validation", async () => {
     const privateKey = keyPair.privateKey.export({ format: "jwk" });
     const issuer = createJwtIssuer({ ...issuerOptions, privateKey });
     const issued = await issuer.issue({ subject: "rsa-user" });
@@ -328,7 +328,7 @@ describe("JWT issuer algorithms", () => {
     await expect(issuer.validator.validate(issued)).resolves.toMatchObject({ id: "rsa-user" });
   });
 
-  it("should issue and validate ES256 with a Web Crypto P-256 key", async () => {
+  it("should give the expected result when issue and validate ES256 with a Web Crypto P-256 key", async () => {
     const pair = (await crypto.subtle.generateKey(
       { name: "ECDSA", namedCurve: "P-256" },
       true,
@@ -349,7 +349,7 @@ describe("JWT issuer algorithms", () => {
     });
   });
 
-  it("should validate ES256 from a public JWKS and reject an invalid signature", async () => {
+  it("should give the expected result when validate ES256 from a public JWKS and reject an invalid signature", async () => {
     const ecPair = generateKeyPairSync("ec", { namedCurve: "P-256" });
     const publicKey = ecPair.publicKey.export({ format: "jwk" });
     const header = base64url(JSON.stringify({ alg: "ES256", kid: "ec-key", typ: "JWT" }));
@@ -374,7 +374,7 @@ describe("JWT issuer algorithms", () => {
   it.each([
     ["RS256", { kty: "EC", crv: "P-256", x: "x", y: "y", kid: "mixed" }],
     ["ES256", { ...jwk, kid: "mixed" }],
-  ])("should reject %s headers paired with a different key shape", async (alg, mixedKey) => {
+  ])("should give the expected result when reject %s headers paired with a different key shape", async (alg, mixedKey) => {
     const validator = createJwtValidator({
       issuer: validPayload.iss,
       jwks: { keys: [mixedKey] },
@@ -385,7 +385,7 @@ describe("JWT issuer algorithms", () => {
     });
   });
 
-  it("should reject unsupported curves and conflicting JWK algorithm metadata", async () => {
+  it("should give the expected result when reject unsupported curves and conflicting JWK algorithm metadata", async () => {
     expect(() =>
       createJwtIssuer({
         ...issuerOptions,
@@ -411,7 +411,7 @@ describe("JWT issuer algorithms", () => {
 });
 
 describe("Principal contract", () => {
-  it("should describe identity, claims, roles, and permissions as one value", () => {
+  it("should give the expected result when describe identity, claims, roles, and permissions as one value", () => {
     const principal: Principal = {
       id: "user-1",
       subject: "auth0|user-1",
@@ -427,7 +427,7 @@ describe("Principal contract", () => {
     expect(principal.permissions).toContain("users:read");
   });
 
-  it("should allow provider-specific claims without weakening the core contract", () => {
+  it("should give the expected result when allow provider-specific claims without weakening the core contract", () => {
     const principal: Principal = { id: "user-1", organizationId: "org-1" };
     expect(principal.organizationId).toBe("org-1");
   });
@@ -437,7 +437,7 @@ const request = (url = "https://tenant.example.test/account") =>
   new Request(url, { headers: { cookie: "session=s-1" } });
 
 describe("shared auth resolution", () => {
-  it("should resolve anonymous requests with empty auth context", async () => {
+  it("should give the expected result when resolve anonymous requests with empty auth context", async () => {
     const auth = createAuth({ sessions: { get: async () => null } });
     await expect(auth.resolve(new Request("https://example.test/"))).resolves.toEqual({
       authenticated: false,
@@ -447,7 +447,7 @@ describe("shared auth resolution", () => {
     });
   });
 
-  it("should resolve opaque browser sessions", async () => {
+  it("should give the expected result when resolve opaque browser sessions", async () => {
     const auth = createAuth({
       sessions: {
         get: async (id) =>
@@ -462,7 +462,7 @@ describe("shared auth resolution", () => {
     });
   });
 
-  it("should resolve the configured tenant explicitly", async () => {
+  it("should give the expected result when resolve the configured tenant explicitly", async () => {
     const auth = createAuth({
       tenant: async (req) => new URL(req.url).hostname,
       sessions: { get: async () => null },
@@ -470,7 +470,7 @@ describe("shared auth resolution", () => {
     await expect(auth.resolve(request())).resolves.toMatchObject({ tenant: "tenant.example.test" });
   });
 
-  it("should isolate auth state across concurrent requests", async () => {
+  it("should give the expected result when isolate auth state across concurrent requests", async () => {
     const auth = createAuth({
       sessions: { get: async (id) => ({ id, subject: id, expiresAt: Date.now() + 60_000 }) },
       principals: { get: async (subject) => ({ id: subject }) },
@@ -485,7 +485,7 @@ describe("shared auth resolution", () => {
     expect(two.principal?.id).toBe("s-2");
   });
 
-  it("should evaluate shared requirements against one auth context", async () => {
+  it("should give the expected result when evaluate shared requirements against one auth context", async () => {
     const context: AuthContext = {
       authenticated: true,
       principal: { id: "u", roles: ["admin"], permissions: ["users:read"] },
@@ -505,7 +505,7 @@ describe("shared auth resolution", () => {
     });
   });
 
-  it("should return unauthenticated given requireUser and anonymous context", async () => {
+  it("should give the expected result when return unauthenticated given requireUser and anonymous context", async () => {
     const context: AuthContext = {
       authenticated: false,
       principal: null,
@@ -518,7 +518,7 @@ describe("shared auth resolution", () => {
     });
   });
 
-  it("should return already authenticated given requireAnonymous and a user", async () => {
+  it("should give the expected result when return already authenticated given requireAnonymous and a user", async () => {
     const context: AuthContext = {
       authenticated: true,
       principal: { id: "user-1" },
@@ -531,7 +531,7 @@ describe("shared auth resolution", () => {
     });
   });
 
-  it("should return forbidden given an authenticated user without a role", async () => {
+  it("should give the expected result when return forbidden given an authenticated user without a role", async () => {
     const context: AuthContext = {
       authenticated: true,
       principal: { id: "user-1" },
@@ -544,7 +544,7 @@ describe("shared auth resolution", () => {
     });
   });
 
-  it("should compose requirements with allOf and anyOf", async () => {
+  it("should give the expected result when compose requirements with allOf and anyOf", async () => {
     const context: AuthContext = {
       authenticated: true,
       principal: { id: "user-1", roles: ["admin"] },
