@@ -35,12 +35,17 @@ export interface OidcTokenResponse extends Record<string, unknown> {
 }
 export interface OidcCodeExchange {
   code: string;
-  codeVerifier: string;
+  state: string;
+  request: Pick<OidcAuthorizationRequest, "state" | "nonce" | "codeVerifier">;
+}
+export interface OidcCodeExchangeResult {
+  tokens: OidcTokenResponse;
+  principal: import("./model").Principal;
 }
 export interface OidcClient {
   discover(): Promise<OidcProviderMetadata>;
   createAuthorizationRequest(
     options?: OidcAuthorizationRequestOptions,
   ): Promise<OidcAuthorizationRequest>;
-  exchangeCode(input: OidcCodeExchange): Promise<OidcTokenResponse>;
+  exchangeCode(input: OidcCodeExchange): Promise<OidcCodeExchangeResult>;
 }

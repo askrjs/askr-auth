@@ -6,7 +6,7 @@ const root = resolve(import.meta.dirname, "..");
 
 describe("package architecture", () => {
   it("should give the expected result when keep public index barrels re-export only", () => {
-    for (const file of ["src/index.ts", "src/jwt.ts", "src/oidc.ts", "src/saml.ts"]) {
+    for (const file of ["src/index.ts", "src/jwt.ts", "src/oidc.ts", "src/saml.ts", "src/mfa.ts"]) {
       const source = readFileSync(resolve(root, file), "utf8");
       expect(
         source
@@ -41,6 +41,11 @@ describe("package architecture", () => {
       "src/saml-request.ts",
       "src/saml-response.ts",
       "src/saml-types.ts",
+      "src/cbor.ts",
+      "src/cose.ts",
+      "src/mfa-error.ts",
+      "src/totp.ts",
+      "src/webauthn.ts",
     ]) {
       expect(
         readFileSync(resolve(root, file), "utf8").split("\n").length,

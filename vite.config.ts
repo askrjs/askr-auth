@@ -7,6 +7,7 @@ export default defineConfig({
       jwt: "src/jwt.ts",
       oidc: "src/oidc.ts",
       saml: "src/saml.ts",
+      mfa: "src/mfa.ts",
     },
     format: ["esm"],
     outDir: "dist",

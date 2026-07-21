@@ -1,13 +1,16 @@
 {
   "name": "@askrjs/auth",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Shared authentication contracts and request auth resolution for Askr",
   "keywords": [
     "askr",
     "authentication",
     "authorization",
     "oidc",
-    "saml"
+    "saml",
+    "mfa",
+    "totp",
+    "webauthn"
   ],
   "homepage": "https://github.com/askrjs/askr-auth#readme",
   "bugs": {
@@ -46,6 +49,10 @@
       "types": "./dist/saml.d.ts",
       "import": "./dist/saml.js"
     },
+    "./mfa": {
+      "types": "./dist/mfa.d.ts",
+      "import": "./dist/mfa.js"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -70,7 +77,7 @@
     "vitest": "^4.0.0"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "dependencies": {
     "@xmldom/xmldom": "0.8.13",

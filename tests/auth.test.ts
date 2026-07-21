@@ -31,6 +31,18 @@ const oidcFetch = async (input: RequestInfo | URL) => {
 };
 
 describe("OIDC client", () => {
+  it("should give state-mismatch without network access when callback state differs", async () => {
+    let calls = 0;
+    const client = createOidcClient({ issuer: oidcMetadata.issuer, clientId: "askr-client", redirectUri: "https://app.example.test/callback", fetch: async () => { calls++; throw new Error("unexpected"); } });
+    await expect(client.exchangeCode({ code: "code-1", state: "wrong", request: { state: "stored", nonce: "nonce-1", codeVerifier: "verifier" } })).rejects.toMatchObject({ code: "state-mismatch" });
+    expect(calls).toBe(0);
+  });
+
+  it("should give invalid-metadata when discovery issuer does not exactly match", async () => {
+    const client = createOidcClient({ issuer: oidcMetadata.issuer, clientId: "askr-client", redirectUri: "https://app.example.test/callback", fetch: async () => new Response(JSON.stringify({ ...oidcMetadata, issuer: `${oidcMetadata.issuer}/other` })) });
+    await expect(client.discover()).rejects.toMatchObject({ code: "invalid-metadata" });
+  });
+
   it("should give the expected result when discover an external OIDC provider from its issuer", async () => {
     const client = createOidcClient({
       issuer: "https://login.example.test",
@@ -78,11 +90,12 @@ describe("OIDC client", () => {
       if (String(input).endsWith("openid-configuration")) {
         return new Response(JSON.stringify(oidcMetadata), { status: 200 });
       }
+      if (String(input) === oidcMetadata.jwks_uri) return new Response(JSON.stringify(jwks));
       tokenInit = init;
       return new Response(
         JSON.stringify({
           access_token: "access-1",
-          id_token: "id-token-1",
+          id_token: token({ ...validPayload, iss: oidcMetadata.issuer, aud: "askr-client", nonce: "nonce-1", iat: Math.floor(Date.now() / 1000), nbf: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 300 }),
           token_type: "Bearer",
           expires_in: 300,
         }),
@@ -96,17 +109,11 @@ describe("OIDC client", () => {
       fetch,
     });
 
-    await expect(
-      client.exchangeCode({
-        code: "code-1",
-        codeVerifier: "test-verifier",
-      }),
-    ).resolves.toEqual({
-      access_token: "access-1",
-      id_token: "id-token-1",
-      token_type: "Bearer",
-      expires_in: 300,
+    const exchanged = await client.exchangeCode({
+      code: "code-1", state: "state-1",
+      request: { state: "state-1", nonce: "nonce-1", codeVerifier: "test-verifier" },
     });
+    expect(exchanged.principal).toMatchObject({ id: "user-1", nonce: "nonce-1" });
     expect(tokenInit?.method).toBe("POST");
     expect(tokenInit?.headers).toMatchObject({
       "content-type": "application/x-www-form-urlencoded",
@@ -149,8 +156,9 @@ describe("OIDC client", () => {
       if (String(input).endsWith("openid-configuration")) {
         return new Response(JSON.stringify(oidcMetadata), { status: 200 });
       }
+      if (String(input) === oidcMetadata.jwks_uri) return new Response(JSON.stringify(jwks));
       tokenInit = init;
-      return new Response(JSON.stringify({ access_token: "access-1", token_type: "Bearer" }));
+      return new Response(JSON.stringify({ access_token: "access-1", token_type: "Bearer", id_token: token({ ...validPayload, iss: oidcMetadata.issuer, aud: "askr-client", nonce: "nonce-1", iat: Math.floor(Date.now() / 1000), nbf: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 300 }) }));
     };
     const client = createOidcClient({
       issuer: "https://login.example.test",
@@ -160,7 +168,7 @@ describe("OIDC client", () => {
       fetch,
     });
 
-    await client.exchangeCode({ code: "code-1", codeVerifier: "test-verifier" });
+    await client.exchangeCode({ code: "code-1", state: "state-1", request: { state: "state-1", nonce: "nonce-1", codeVerifier: "test-verifier" } });
     expect(new Headers(tokenInit?.headers).get("authorization")).toBe(
       `Basic ${btoa("askr-client:client-secret")}`,
     );

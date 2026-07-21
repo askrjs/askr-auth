@@ -16,6 +16,8 @@ export function createJwtValidator(options: JwtValidatorOptions): JwtValidator {
   let cachedKeys: JsonWebKeySet | undefined;
   return {
     async validate(token) {
+      if (token.length > 65_536)
+        throw new JwtValidationError("malformed_token", "JWT exceeds the 64 KiB size limit.");
       const parts = token.split(".");
       if (parts.length !== 3 || !parts[0] || !parts[1])
         throw new JwtValidationError("malformed_token", "JWT must have three segments.");
@@ -32,7 +34,13 @@ export function createJwtValidator(options: JwtValidatorOptions): JwtValidator {
         const provider = options.jwks;
         cachedKeys = typeof provider === "function" ? await provider() : provider;
       }
-      const key = cachedKeys.keys.find((candidate) => candidate.kid === header.kid);
+      let refreshedKeys = false;
+      let key = cachedKeys.keys.find((candidate) => candidate.kid === header.kid);
+      if (!key && typeof options.jwks === "function") {
+        cachedKeys = await options.jwks();
+        refreshedKeys = true;
+        key = cachedKeys.keys.find((candidate) => candidate.kid === header.kid);
+      }
       if (!key) throw new JwtValidationError("unknown_key", "JWT signing key was not found.");
       let algorithm;
       try {
@@ -48,23 +56,22 @@ export function createJwtValidator(options: JwtValidatorOptions): JwtValidator {
           "unsupported_algorithm",
           "JWT header algorithm does not match its signing key.",
         );
-      let valid = false;
-      try {
-        const imported = await globalThis.crypto.subtle.importKey(
-          "jwk",
-          key,
-          algorithm.import,
-          false,
-          ["verify"],
-        );
-        valid = await globalThis.crypto.subtle.verify(
-          algorithm.operation,
-          imported,
-          Uint8Array.from(decodeBase64Url(parts[2]), (char) => char.charCodeAt(0)),
-          new TextEncoder().encode(`${parts[0]}.${parts[1]}`),
-        );
-      } catch {
-        valid = false;
+      const verifyWith = async (candidate: typeof key, operation: typeof algorithm) => {
+        try {
+          const imported = await globalThis.crypto.subtle.importKey("jwk", candidate, operation.import, false, ["verify"]);
+          return await globalThis.crypto.subtle.verify(operation.operation, imported, Uint8Array.from(decodeBase64Url(parts[2]), (char) => char.charCodeAt(0)), new TextEncoder().encode(`${parts[0]}.${parts[1]}`));
+        } catch { return false; }
+      };
+      let valid = await verifyWith(key, algorithm);
+      if (!valid && !refreshedKeys && typeof options.jwks === "function") {
+        cachedKeys = await options.jwks();
+        const refreshed = cachedKeys.keys.find((candidate) => candidate.kid === header.kid);
+        if (refreshed) {
+          try {
+            const refreshedAlgorithm = resolveJwtAlgorithm(refreshed);
+            if (refreshedAlgorithm.jwt === header.alg) valid = await verifyWith(refreshed, refreshedAlgorithm);
+          } catch { valid = false; }
+        }
       }
       if (!valid) throw new JwtValidationError("invalid_signature", "JWT signature is invalid.");
       if (payload.iss !== options.issuer)
@@ -94,5 +101,9 @@ export async function validateOidcIdToken(
   const principal = await createJwtValidator(jwtOptions).validate(token);
   if (principal.nonce !== nonce)
     throw new JwtValidationError("invalid_claim", "OIDC ID token nonce is invalid.");
+  const payload = principal as Record<string, unknown>;
+  const audience = payload.aud;
+  if (Array.isArray(audience) && audience.length > 1 && payload.azp !== options.audience)
+    throw new JwtValidationError("invalid_claim", "OIDC ID token authorized party is invalid.");
   return principal;
 }

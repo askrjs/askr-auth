@@ -2,8 +2,13 @@ import { JwtValidationError } from "./jwt-error";
 
 export function decodeBase64Url(value: string): string {
   try {
+    if (!/^[A-Za-z0-9_-]*$/u.test(value) || value.length % 4 === 1)
+      throw new Error();
     const normalized = value.replaceAll("-", "+").replaceAll("_", "/");
-    return atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "="));
+    const decoded = atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "="));
+    const canonical = Buffer.from(decoded, "binary").toString("base64url");
+    if (canonical !== value) throw new Error();
+    return decoded;
   } catch {
     throw new JwtValidationError("malformed_token", "JWT contains invalid base64url data.");
   }

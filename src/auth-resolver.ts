@@ -27,8 +27,8 @@ export function createAuth<P extends Principal = Principal, S extends AuthSessio
             ? options.tenant
             : await options.tenant(request, { signal });
       const authorization = request.headers.get("authorization");
-      if (options.jwt && authorization?.startsWith("Bearer ")) {
-        const token = authorization.slice("Bearer ".length).trim();
+      if (options.jwt && /^Bearer\s/iu.test(authorization ?? "")) {
+        const token = authorization!.replace(/^Bearer\s+/iu, "").trim();
         if (!token) return context;
         const validated = await options.jwt.validate(token);
         const principal = options.principals

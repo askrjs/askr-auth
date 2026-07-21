@@ -1,5 +1,8 @@
 # Feature request: SAML Service Provider support
 
+Status: implemented. The canonical package feature matrix and exclusions live in the README;
+this proposal records the SAML-specific design history.
+
 ## Summary
 
 Add SAML 2.0 Service Provider (SP) support to `@askrjs/auth` — validating an inbound SAML

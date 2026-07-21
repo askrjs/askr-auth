@@ -33,6 +33,7 @@ function extract(assertionXml: string, options: SamlServiceProviderOptions, now:
   const doc = parseXml(assertionXml); checkUniqueIds(doc);
   const assertion = doc.documentElement;
   if (assertion.namespaceURI !== NS.assertion || assertion.localName !== "Assertion") malformed("Signed reference is not an assertion");
+  if (assertion.getAttribute("Version") !== "2.0" || !assertion.getAttribute("ID")) malformed("Assertion version or ID is invalid");
   const issuer = textOf(one(assertion, NS.assertion, "Issuer"));
   if (issuer !== options.idp.entityId) invalid("Unexpected assertion issuer");
   validateTime(assertion, now, (options.clockSkewSeconds ?? 60) * 1000, (options.maxAssertionAgeSeconds ?? 300) * 1000);
@@ -50,6 +51,8 @@ function extract(assertionXml: string, options: SamlServiceProviderOptions, now:
   if (now - (options.clockSkewSeconds ?? 60) * 1000 >= expires) invalid("Subject confirmation has expired");
   const statements = children(assertion, NS.assertion, "AuthnStatement");
   if (statements.length !== 1) invalid("Expected one AuthnStatement");
+  const authnInstant = instant(statements[0].getAttribute("AuthnInstant"), "AuthnInstant");
+  if (authnInstant > now + (options.clockSkewSeconds ?? 60) * 1000) invalid("Authentication occurred in the future");
   const attributes: Record<string, string[]> = {};
   for (const statement of children(assertion, NS.assertion, "AttributeStatement")) for (const attribute of children(statement, NS.assertion, "Attribute")) {
     const name = attribute.getAttribute("Name"); if (!name || Object.hasOwn(attributes, name)) invalid("Invalid or duplicate attribute name");
@@ -63,6 +66,9 @@ export async function validate(input: { samlResponse: string; relayState?: strin
   const responseXml = decode(input.samlResponse); const doc = parseXml(responseXml); checkUniqueIds(doc);
   let response = doc.documentElement;
   if (response.namespaceURI !== NS.protocol || response.localName !== "Response") malformed("Expected one SAML Response root");
+  if (response.getAttribute("Version") !== "2.0" || !response.getAttribute("ID")) malformed("Response version or ID is invalid");
+  instant(response.getAttribute("IssueInstant"), "Response IssueInstant");
+  if (children(response, NS.protocol, "Status").length !== 1) malformed("Expected one response Status");
   const status = one(one(response, NS.protocol, "Status"), NS.protocol, "StatusCode").getAttribute("Value");
   if (status !== "urn:oasis:names:tc:SAML:2.0:status:Success") throw new SamlValidationError("idp-error", "Identity provider returned an error");
   const responseSignatures = children(response, NS.ds, "Signature");
