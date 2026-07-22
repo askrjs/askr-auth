@@ -14,7 +14,7 @@ if (result.length !== 1) {
 }
 
 const packedFiles = new Set(result[0].files.map(({ path }) => normalize(path)));
-for (const required of ["dist/index.js", "dist/index.d.ts", "dist/jwt.js", "dist/jwt.d.ts", "dist/oidc.js", "dist/oidc.d.ts", "dist/saml.js", "dist/saml.d.ts", "dist/mfa.js", "dist/mfa.d.ts"]) {
+for (const required of ["dist/index.js", "dist/index.d.ts", "dist/jwt.js", "dist/jwt.d.ts", "dist/oidc.js", "dist/oidc.d.ts", "dist/saml.js", "dist/saml.d.ts", "dist/mfa.js", "dist/mfa.d.ts", "dist/webauthn-client.js", "dist/webauthn-client.d.ts"]) {
   if (!packedFiles.has(normalize(required))) throw new Error(`Packed artifact is missing ${required}.`);
 }
 const sourceMappingPattern = /[#@]\s*sourceMappingURL=([^\s*]+)/gu;

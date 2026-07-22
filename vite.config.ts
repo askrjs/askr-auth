@@ -8,6 +8,7 @@ export default defineConfig({
       oidc: "src/oidc.ts",
       saml: "src/saml.ts",
       mfa: "src/mfa.ts",
+      "webauthn-client": "src/webauthn-client.ts",
     },
     format: ["esm"],
     outDir: "dist",

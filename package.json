@@ -1,6 +1,6 @@
 {
   "name": "@askrjs/auth",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Shared authentication contracts and request auth resolution for Askr",
   "keywords": [
     "askr",
@@ -52,6 +52,10 @@
     "./mfa": {
       "types": "./dist/mfa.d.ts",
       "import": "./dist/mfa.js"
+    },
+    "./webauthn-client": {
+      "types": "./dist/webauthn-client.d.ts",
+      "import": "./dist/webauthn-client.js"
     },
     "./package.json": "./package.json"
   },
