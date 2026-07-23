@@ -280,11 +280,37 @@ describe("JWT resource server", () => {
     await expect(
       validator.validate(token(validPayload, "key-1", "RS256", { b64: false })),
     ).rejects.toMatchObject({ code: "unsupported_algorithm" });
-    await expect(validator.validate(token(validPayload))).rejects.toMatchObject({
+    await expect(
+      validator.validate(token(validPayload, "key-1", "RS256", { typ: null })),
+    ).rejects.toMatchObject({
       code: "invalid_claim",
     });
     await expect(
       validator.validate(token(validPayload, "key-1", "RS256", { typ: "at+jwt" })),
+    ).resolves.toHaveProperty("id", "user-1");
+  });
+
+  it("should validate JWT hardening options and required typ headers", async () => {
+    for (const options of [
+      { clockSkewSeconds: Number.NaN },
+      { jwksRefreshCooldownSeconds: -1 },
+      { unknownKeyCacheSeconds: Number.POSITIVE_INFINITY },
+    ])
+      expect(() =>
+        createJwtValidator({ issuer: validPayload.iss, jwks, ...options }),
+      ).toThrow(TypeError);
+
+    const validator = createJwtValidator({
+      issuer: validPayload.iss,
+      jwks,
+      clock: () => now,
+      requireTyp: true,
+    });
+    await expect(
+      validator.validate(token(validPayload, "key-1", "RS256", { typ: null })),
+    ).rejects.toMatchObject({ code: "invalid_claim" });
+    await expect(
+      validator.validate(token(validPayload, "key-1", "RS256", { typ: "JWT" })),
     ).resolves.toHaveProperty("id", "user-1");
   });
 

@@ -25,11 +25,12 @@ export function createJwtValidator(options: JwtValidatorOptions): JwtValidator {
   let refreshPromise: Promise<JsonWebKeySet> | undefined;
   let lastRefresh = Number.NEGATIVE_INFINITY;
   const unknownKeys = new Map<string, number>();
+  const maxUnknownKeys = 1_024;
   const provider = options.jwks;
   const refresh = async (): Promise<JsonWebKeySet> => {
     if (typeof provider !== "function") return provider;
     if (!refreshPromise) {
-      refreshPromise = Promise.resolve(provider()).finally(() => {
+      refreshPromise = Promise.resolve().then(provider).finally(() => {
         refreshPromise = undefined;
       });
     }
@@ -69,16 +70,22 @@ export function createJwtValidator(options: JwtValidatorOptions): JwtValidator {
       if (typeof header.kid !== "string" || !header.kid)
         throw new JwtValidationError("unknown_key", "JWT kid header is required.");
       if (!cachedKeys) {
-        cachedKeys = typeof provider === "function" ? await provider() : provider;
+        cachedKeys = typeof provider === "function" ? await refresh() : provider;
       }
       let key = cachedKeys.keys.find((candidate) => candidate.kid === header.kid);
       if (!key && typeof options.jwks === "function") {
         const current = clock();
+        for (const [kid, expiresAt] of unknownKeys)
+          if (expiresAt <= current) unknownKeys.delete(kid);
         const negativeUntil = unknownKeys.get(header.kid) ?? Number.NEGATIVE_INFINITY;
         if (current >= negativeUntil && current - lastRefresh >= refreshCooldown) {
           cachedKeys = await refresh();
           key = cachedKeys.keys.find((candidate) => candidate.kid === header.kid);
-          if (!key) unknownKeys.set(header.kid, current + negativeTtl);
+          if (!key && negativeTtl > 0) {
+            if (unknownKeys.size >= maxUnknownKeys)
+              unknownKeys.delete(unknownKeys.keys().next().value!);
+            unknownKeys.set(header.kid, current + negativeTtl);
+          }
         }
       }
       if (!key) throw new JwtValidationError("unknown_key", "JWT signing key was not found.");
