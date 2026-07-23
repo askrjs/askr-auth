@@ -13,7 +13,31 @@ import type {
 export function createJwtValidator(options: JwtValidatorOptions): JwtValidator {
   const clock = options.clock ?? (() => Math.floor(Date.now() / 1000));
   const skew = options.clockSkewSeconds ?? 0;
+  if (!Number.isFinite(skew) || skew < 0)
+    throw new TypeError("JWT clockSkewSeconds must be a non-negative number.");
+  const refreshCooldown = options.jwksRefreshCooldownSeconds ?? 30;
+  const negativeTtl = options.unknownKeyCacheSeconds ?? 30;
+  if (!Number.isFinite(refreshCooldown) || refreshCooldown < 0)
+    throw new TypeError("JWT jwksRefreshCooldownSeconds must be non-negative.");
+  if (!Number.isFinite(negativeTtl) || negativeTtl < 0)
+    throw new TypeError("JWT unknownKeyCacheSeconds must be non-negative.");
   let cachedKeys: JsonWebKeySet | undefined;
+  let refreshPromise: Promise<JsonWebKeySet> | undefined;
+  let lastRefresh = Number.NEGATIVE_INFINITY;
+  const unknownKeys = new Map<string, number>();
+  const provider = options.jwks;
+  const refresh = async (): Promise<JsonWebKeySet> => {
+    if (typeof provider !== "function") return provider;
+    if (!refreshPromise) {
+      refreshPromise = Promise.resolve(provider()).finally(() => {
+        refreshPromise = undefined;
+      });
+    }
+    const keys = await refreshPromise;
+    cachedKeys = keys;
+    lastRefresh = clock();
+    return keys;
+  };
   return {
     async validate(token) {
       if (token.length > 65_536)
@@ -28,18 +52,34 @@ export function createJwtValidator(options: JwtValidatorOptions): JwtValidator {
           "unsupported_algorithm",
           "Only RS256 and ES256 JWTs are accepted.",
         );
+      if (header.crit !== undefined || header.b64 !== undefined)
+        throw new JwtValidationError(
+          "unsupported_algorithm",
+          "JWT crit and b64 protected headers are not supported.",
+        );
+      const allowedTypes =
+        typeof options.typ === "string" ? [options.typ] : options.typ;
+      if (
+        (options.requireTyp || allowedTypes) &&
+        (typeof header.typ !== "string" ||
+          !header.typ ||
+          (allowedTypes !== undefined && !allowedTypes.includes(header.typ)))
+      )
+        throw new JwtValidationError("invalid_claim", "JWT typ header is invalid.");
       if (typeof header.kid !== "string" || !header.kid)
         throw new JwtValidationError("unknown_key", "JWT kid header is required.");
       if (!cachedKeys) {
-        const provider = options.jwks;
         cachedKeys = typeof provider === "function" ? await provider() : provider;
       }
-      let refreshedKeys = false;
       let key = cachedKeys.keys.find((candidate) => candidate.kid === header.kid);
       if (!key && typeof options.jwks === "function") {
-        cachedKeys = await options.jwks();
-        refreshedKeys = true;
-        key = cachedKeys.keys.find((candidate) => candidate.kid === header.kid);
+        const current = clock();
+        const negativeUntil = unknownKeys.get(header.kid) ?? Number.NEGATIVE_INFINITY;
+        if (current >= negativeUntil && current - lastRefresh >= refreshCooldown) {
+          cachedKeys = await refresh();
+          key = cachedKeys.keys.find((candidate) => candidate.kid === header.kid);
+          if (!key) unknownKeys.set(header.kid, current + negativeTtl);
+        }
       }
       if (!key) throw new JwtValidationError("unknown_key", "JWT signing key was not found.");
       let algorithm;
@@ -62,17 +102,7 @@ export function createJwtValidator(options: JwtValidatorOptions): JwtValidator {
           return await globalThis.crypto.subtle.verify(operation.operation, imported, Uint8Array.from(decodeBase64Url(parts[2]), (char) => char.charCodeAt(0)), new TextEncoder().encode(`${parts[0]}.${parts[1]}`));
         } catch { return false; }
       };
-      let valid = await verifyWith(key, algorithm);
-      if (!valid && !refreshedKeys && typeof options.jwks === "function") {
-        cachedKeys = await options.jwks();
-        const refreshed = cachedKeys.keys.find((candidate) => candidate.kid === header.kid);
-        if (refreshed) {
-          try {
-            const refreshedAlgorithm = resolveJwtAlgorithm(refreshed);
-            if (refreshedAlgorithm.jwt === header.alg) valid = await verifyWith(refreshed, refreshedAlgorithm);
-          } catch { valid = false; }
-        }
-      }
+      const valid = await verifyWith(key, algorithm);
       if (!valid) throw new JwtValidationError("invalid_signature", "JWT signature is invalid.");
       if (payload.iss !== options.issuer)
         throw new JwtValidationError("invalid_claim", "JWT issuer is invalid.");

@@ -183,8 +183,15 @@ function base64url(value: string | Buffer): string {
   return Buffer.from(value).toString("base64url");
 }
 
-function token(payload: Record<string, unknown>, kid = "key-1", algorithm = "RS256") {
-  const header = base64url(JSON.stringify({ alg: algorithm, kid, typ: "JWT" }));
+function token(
+  payload: Record<string, unknown>,
+  kid = "key-1",
+  algorithm = "RS256",
+  protectedHeader: Record<string, unknown> = {},
+) {
+  const header = base64url(
+    JSON.stringify({ alg: algorithm, kid, typ: "JWT", ...protectedHeader }),
+  );
   const body = base64url(JSON.stringify(payload));
   const input = `${header}.${body}`;
   const signature =
@@ -258,6 +265,78 @@ describe("JWT resource server", () => {
     await expect(validator.validate(token(validPayload, "rotated-key"))).rejects.toMatchObject({
       code: "unknown_key",
     });
+  });
+
+  it("should reject unsupported JOSE extensions and invalid typ profiles", async () => {
+    const validator = createJwtValidator({
+      issuer: validPayload.iss,
+      jwks,
+      clock: () => now,
+      typ: ["at+jwt"],
+    });
+    await expect(
+      validator.validate(token(validPayload, "key-1", "RS256", { crit: ["b64"] })),
+    ).rejects.toMatchObject({ code: "unsupported_algorithm" });
+    await expect(
+      validator.validate(token(validPayload, "key-1", "RS256", { b64: false })),
+    ).rejects.toMatchObject({ code: "unsupported_algorithm" });
+    await expect(validator.validate(token(validPayload))).rejects.toMatchObject({
+      code: "invalid_claim",
+    });
+    await expect(
+      validator.validate(token(validPayload, "key-1", "RS256", { typ: "at+jwt" })),
+    ).resolves.toHaveProperty("id", "user-1");
+  });
+
+  it("should singleflight and negatively cache unknown JWKS key refreshes", async () => {
+    let calls = 0;
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const validator = createJwtValidator({
+      issuer: validPayload.iss,
+      jwks: async () => {
+        calls += 1;
+        if (calls > 1) await gate;
+        return jwks;
+      },
+      clock: () => now,
+      jwksRefreshCooldownSeconds: 0,
+      unknownKeyCacheSeconds: 60,
+    });
+    await expect(validator.validate(token(validPayload))).resolves.toHaveProperty("id", "user-1");
+    const forged = token(validPayload, "attacker-key");
+    const attempts = [
+      validator.validate(forged),
+      validator.validate(forged),
+      validator.validate(forged),
+    ];
+    release!();
+    await Promise.all(attempts.map((attempt) => expect(attempt).rejects.toMatchObject({
+      code: "unknown_key",
+    })));
+    expect(calls).toBe(2);
+    await expect(validator.validate(forged)).rejects.toMatchObject({ code: "unknown_key" });
+    expect(calls).toBe(2);
+  });
+
+  it("should not refresh JWKS after a known key produces an invalid signature", async () => {
+    let calls = 0;
+    const validator = createJwtValidator({
+      issuer: validPayload.iss,
+      jwks: async () => {
+        calls += 1;
+        return jwks;
+      },
+      clock: () => now,
+    });
+    const signed = token(validPayload).split(".");
+    signed[2] = `${signed[2]![0] === "A" ? "B" : "A"}${signed[2]!.slice(1)}`;
+    await expect(validator.validate(signed.join("."))).rejects.toMatchObject({
+      code: "invalid_signature",
+    });
+    expect(calls).toBe(1);
   });
 
   it("should give the expected result when resolve a rotated key through a key provider", async () => {
