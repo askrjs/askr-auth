@@ -15,6 +15,12 @@ export interface JwtValidatorOptions {
   jwks: JwksProvider;
   clock?: () => number;
   clockSkewSeconds?: number;
+  /** Require a protected typ value and restrict it to these values. */
+  typ?: string | readonly string[];
+  /** Require a non-empty protected typ value without restricting its value. */
+  requireTyp?: boolean;
+  jwksRefreshCooldownSeconds?: number;
+  unknownKeyCacheSeconds?: number;
 }
 export interface OidcIdTokenOptions extends JwtValidatorOptions {
   nonce: string;
