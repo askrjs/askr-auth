@@ -81,8 +81,9 @@
     "vitest": "^4.0.0"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=24.0.0"
   },
+  "packageManager": "npm@12.0.1",
   "dependencies": {
     "@xmldom/xmldom": "0.8.13",
     "xml-crypto": "6.1.2",
