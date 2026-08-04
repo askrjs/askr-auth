@@ -15,21 +15,13 @@ permissions:
 
 jobs:
   ci:
-    name: CI (${{ matrix.os }}, Node ${{ matrix.node }})
+    name: CI (${{ matrix.os }}, Node LTS)
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            node: "22"
-          - os: ubuntu-latest
-            node: "24"
-          - os: windows-latest
-            node: "24"
-          - os: macos-latest
-            node: "24"
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
       - name: Checkout repository
@@ -38,7 +30,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
-          node-version: ${{ matrix.node }}
+          node-version: "lts/*"
           cache: npm
 
       - name: Install dependencies
