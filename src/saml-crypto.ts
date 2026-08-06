@@ -1,7 +1,7 @@
 import { createPrivateKey } from "node:crypto";
 import { SignedXml } from "xml-crypto";
 import { decrypt } from "xml-encryption";
-import { NS, children, elements, parseXml, serialize } from "./saml-dom";
+import { NS, children, elements, parseXml, serialize, type XmlElement } from "./saml-dom";
 import { SamlValidationError } from "./saml-types";
 
 const signatures = new Set([
@@ -17,13 +17,13 @@ const transforms = new Set([
   "http://www.w3.org/2001/10/xml-exc-c14n#",
 ]);
 
-function algorithm(element: Element, child: string): string {
+function algorithm(element: XmlElement, child: string): string {
   const matches = elements(element, NS.ds, child);
   if (matches.length !== 1) unsupported(`Expected one ${child}`);
   return matches[0].getAttribute("Algorithm") ?? "";
 }
 
-function validateAlgorithms(signature: Element, expectedId: string): void {
+function validateAlgorithms(signature: XmlElement, expectedId: string): void {
   if (!signatures.has(algorithm(signature, "SignatureMethod"))) unsupported("Signature algorithm is not allowed");
   const canonicalization = algorithm(signature, "CanonicalizationMethod");
   if (canonicalization !== "http://www.w3.org/2001/10/xml-exc-c14n#") unsupported("Canonicalization algorithm is not allowed");
@@ -34,7 +34,7 @@ function validateAlgorithms(signature: Element, expectedId: string): void {
   if (values.length < 1 || values.some((value) => !transforms.has(value))) unsupported("Signature transform is not allowed");
 }
 
-export function verifySignedElement(documentXml: string, element: Element, certificates: readonly string[]): string {
+export function verifySignedElement(documentXml: string, element: XmlElement, certificates: readonly string[]): string {
   const id = element.getAttribute("ID");
   if (!id) throw new SamlValidationError("invalid-claim", "Signed element has no ID");
   const signatureNodes = children(element, NS.ds, "Signature");
@@ -43,7 +43,7 @@ export function verifySignedElement(documentXml: string, element: Element, certi
   for (const certificate of certificates) {
     try {
       const verifier = new SignedXml({ publicCert: certificate });
-      verifier.loadSignature(signatureNodes[0]);
+      verifier.loadSignature(serialize(signatureNodes[0]));
       if (!verifier.checkSignature(documentXml)) continue;
       const references = verifier.getSignedReferences();
       if (references.length === 1) return references[0];
@@ -52,7 +52,7 @@ export function verifySignedElement(documentXml: string, element: Element, certi
   throw new SamlValidationError("invalid-signature", "SAML signature verification failed");
 }
 
-export async function decryptAssertion(encrypted: Element, privateKey: JsonWebKey): Promise<string> {
+export async function decryptAssertion(encrypted: XmlElement, privateKey: JsonWebKey): Promise<string> {
   const encryptedData = children(encrypted, NS.enc, "EncryptedData");
   const dataAlgorithms = encryptedData.flatMap((data) => children(data, NS.enc, "EncryptionMethod")).map((node) => node.getAttribute("Algorithm"));
   const encryptedKeys = elements(encrypted, NS.enc, "EncryptedKey");

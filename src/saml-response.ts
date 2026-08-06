@@ -1,4 +1,4 @@
-import { NS, checkUniqueIds, children, one, parseXml, serialize, textOf } from "./saml-dom";
+import { NS, checkUniqueIds, children, one, parseXml, serialize, textOf, type XmlElement } from "./saml-dom";
 import { decryptAssertion, verifySignedElement } from "./saml-crypto";
 import { SamlValidationError, type SamlPrincipal, type SamlServiceProviderOptions } from "./saml-types";
 
@@ -19,7 +19,7 @@ function instant(value: string | null, label: string): number {
   return parsed;
 }
 
-function validateTime(element: Element, now: number, skew: number, maxAge: number): void {
+function validateTime(element: XmlElement, now: number, skew: number, maxAge: number): void {
   const issue = instant(element.getAttribute("IssueInstant"), "IssueInstant");
   if (issue > now + skew || issue < now - maxAge - skew) invalid("Assertion IssueInstant is outside the allowed window");
   const conditions = one(element, NS.assertion, "Conditions");
@@ -109,6 +109,6 @@ export async function validate(input: { samlResponse: string; relayState?: strin
 function malformed(message: string): never { throw new SamlValidationError("malformed-response", message); }
 function invalid(message: string): never { throw new SamlValidationError("invalid-claim", message); }
 
-function elementsIn(parent: Element, namespace: string, localName: string): Element[] {
+function elementsIn(parent: XmlElement, namespace: string, localName: string): XmlElement[] {
   return Array.from(parent.getElementsByTagNameNS(namespace, localName));
 }
