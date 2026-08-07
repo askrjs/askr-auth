@@ -28,7 +28,11 @@ export function parseXml(xml: string): XmlDocument {
       fail("Malformed XML");
     }
   })();
-  if (errors.length || !document.documentElement || document.getElementsByTagName("parsererror").length) {
+  if (
+    errors.length ||
+    !document.documentElement ||
+    document.getElementsByTagName("parsererror").length
+  ) {
     fail("Malformed XML");
   }
   return document as XmlDocument;
@@ -39,13 +43,11 @@ export function elements(parent: Node, namespace: string, localName: string): El
 }
 
 export function children(parent: Node, namespace: string, localName: string): Element[] {
-  return Array.from(parent.childNodes).filter(
-    (node): node is Element => {
-      if (node.nodeType !== 1) return false;
-      const element = node as Element;
-      return element.namespaceURI === namespace && element.localName === localName;
-    },
-  );
+  return Array.from(parent.childNodes).filter((node): node is Element => {
+    if (node.nodeType !== 1) return false;
+    const element = node as Element;
+    return element.namespaceURI === namespace && element.localName === localName;
+  });
 }
 
 export function one(parent: Node, namespace: string, localName: string): Element {

@@ -13,7 +13,7 @@ role `oidc-client.ts` already plays for OIDC relying-party flows.
 
 Enterprise integration partners keep asking for SAML SSO: their employees sign in through their
 own corporate IdP (Okta, Azure AD, ADFS, PingFederate, etc.) rather than a password/passkey/TOTP
-flow owned by the app. This is consistently a SAML *Service Provider* need — consuming an
+flow owned by the app. This is consistently a SAML _Service Provider_ need — consuming an
 assertion an external IdP issued — not a request for this library (or any consumer) to act as a
 SAML IdP itself. IdP-side SAML is out of scope for this proposal.
 
@@ -59,10 +59,15 @@ interface SamlServiceProviderOptions {
 interface SamlServiceProvider {
   metadata(): string; // this SP's own SAML metadata XML, for the IdP's config screen
   createAuthnRequest(options?: { relayState?: string }): { url: string; requestId: string };
-  validateResponse(samlResponse: string, options: { expectedRequestId?: string }): Promise<Principal>;
+  validateResponse(
+    samlResponse: string,
+    options: { expectedRequestId?: string },
+  ): Promise<Principal>;
 }
 
-declare function createSamlServiceProvider(options: SamlServiceProviderOptions): SamlServiceProvider;
+declare function createSamlServiceProvider(
+  options: SamlServiceProviderOptions,
+): SamlServiceProvider;
 ```
 
 `validateResponse` is the load-bearing piece and should return a `Principal` the same way
@@ -75,7 +80,7 @@ SAML's assertion format has a genuinely bad security history, distinct from "jus
 format":
 
 - **XML Signature Wrapping (XSW).** The classic SAML vulnerability class — an attacker
-  restructures the XML so the *signed* assertion and the *processed* assertion are different
+  restructures the XML so the _signed_ assertion and the _processed_ assertion are different
   nodes. Defending against it requires validating the signature over the exact node that's then
   read for claims, not "is there a valid signature somewhere in this document." This is easy to
   get subtly wrong.
@@ -107,7 +112,7 @@ concurrent validations cannot both succeed. IdP-initiated responses remain out o
 
 ## Non-goals
 
-- Acting as a SAML *Identity Provider* (issuing assertions to third-party SPs) — no current
+- Acting as a SAML _Identity Provider_ (issuing assertions to third-party SPs) — no current
   requester needs this.
 - SAML Single Logout (SLO) — worth a follow-up once SP-initiated login is solid, not blocking.
 - IdP-initiated flow (assertion arrives unprompted, no prior `AuthnRequest`) — likely needed

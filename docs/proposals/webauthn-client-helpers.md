@@ -8,7 +8,7 @@ Status: implemented in `@askrjs/auth@0.0.6` as the ESM-only
 `@askrjs/auth/mfa` provides the server-side half of a WebAuthn ceremony —
 `verifyWebAuthnRegistration`/`verifyWebAuthnAuthentication`, taking raw `Uint8Array` fields
 (`credentialId`, `clientDataJSON`, `attestationObject`/`authenticatorData`+`signature`) — but
-nothing for the *browser* half: calling `navigator.credentials.create()`/`.get()` and converting
+nothing for the _browser_ half: calling `navigator.credentials.create()`/`.get()` and converting
 the resulting `ArrayBuffer` fields to/from the base64url strings that travel over the wire to the
 server functions above. Every consumer has to hand-write this pairing themselves.
 
@@ -71,7 +71,9 @@ interface PasskeyAssertion {
   authenticatorData: string;
   signature: string;
 }
-declare function getPasskeyAssertion(options: GetPasskeyAssertionOptions): Promise<PasskeyAssertion>;
+declare function getPasskeyAssertion(
+  options: GetPasskeyAssertionOptions,
+): Promise<PasskeyAssertion>;
 ```
 
 Field names on `PasskeyRegistration`/`PasskeyAssertion` deliberately match

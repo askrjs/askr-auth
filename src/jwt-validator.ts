@@ -30,9 +30,11 @@ export function createJwtValidator(options: JwtValidatorOptions): JwtValidator {
   const refresh = async (): Promise<JsonWebKeySet> => {
     if (typeof provider !== "function") return provider;
     if (!refreshPromise) {
-      refreshPromise = Promise.resolve().then(provider).finally(() => {
-        refreshPromise = undefined;
-      });
+      refreshPromise = Promise.resolve()
+        .then(provider)
+        .finally(() => {
+          refreshPromise = undefined;
+        });
     }
     const keys = await refreshPromise;
     cachedKeys = keys;
@@ -58,8 +60,7 @@ export function createJwtValidator(options: JwtValidatorOptions): JwtValidator {
           "unsupported_algorithm",
           "JWT crit and b64 protected headers are not supported.",
         );
-      const allowedTypes =
-        typeof options.typ === "string" ? [options.typ] : options.typ;
+      const allowedTypes = typeof options.typ === "string" ? [options.typ] : options.typ;
       if (
         (options.requireTyp || allowedTypes) &&
         (typeof header.typ !== "string" ||
@@ -105,9 +106,22 @@ export function createJwtValidator(options: JwtValidatorOptions): JwtValidator {
         );
       const verifyWith = async (candidate: typeof key, operation: typeof algorithm) => {
         try {
-          const imported = await globalThis.crypto.subtle.importKey("jwk", candidate, operation.import, false, ["verify"]);
-          return await globalThis.crypto.subtle.verify(operation.operation, imported, Uint8Array.from(decodeBase64Url(parts[2]), (char) => char.charCodeAt(0)), new TextEncoder().encode(`${parts[0]}.${parts[1]}`));
-        } catch { return false; }
+          const imported = await globalThis.crypto.subtle.importKey(
+            "jwk",
+            candidate,
+            operation.import,
+            false,
+            ["verify"],
+          );
+          return await globalThis.crypto.subtle.verify(
+            operation.operation,
+            imported,
+            Uint8Array.from(decodeBase64Url(parts[2]), (char) => char.charCodeAt(0)),
+            new TextEncoder().encode(`${parts[0]}.${parts[1]}`),
+          );
+        } catch {
+          return false;
+        }
       };
       const valid = await verifyWith(key, algorithm);
       if (!valid) throw new JwtValidationError("invalid_signature", "JWT signature is invalid.");

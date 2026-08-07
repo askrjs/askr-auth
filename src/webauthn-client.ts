@@ -41,7 +41,10 @@ export function decodeBase64Url(value: string): ArrayBuffer {
   let binary: string;
   try {
     binary = atob(
-      value.replaceAll("-", "+").replaceAll("_", "/").padEnd(Math.ceil(value.length / 4) * 4, "="),
+      value
+        .replaceAll("-", "+")
+        .replaceAll("_", "/")
+        .padEnd(Math.ceil(value.length / 4) * 4, "="),
     );
   } catch {
     throw new TypeError("Value must be canonical base64url without padding.");
@@ -101,7 +104,9 @@ export async function createPasskey(options: CreatePasskeyOptions): Promise<Pass
   return Object.freeze({
     credentialId: encodeBase64Url(credential.rawId),
     clientDataJSON: encodeBase64Url(arrayBuffer(response.clientDataJSON, "clientDataJSON")),
-    attestationObject: encodeBase64Url(arrayBuffer(response.attestationObject, "attestationObject")),
+    attestationObject: encodeBase64Url(
+      arrayBuffer(response.attestationObject, "attestationObject"),
+    ),
   });
 }
 
@@ -126,7 +131,9 @@ export async function getPasskeyAssertion(
   return Object.freeze({
     credentialId: encodeBase64Url(credential.rawId),
     clientDataJSON: encodeBase64Url(arrayBuffer(response.clientDataJSON, "clientDataJSON")),
-    authenticatorData: encodeBase64Url(arrayBuffer(response.authenticatorData, "authenticatorData")),
+    authenticatorData: encodeBase64Url(
+      arrayBuffer(response.authenticatorData, "authenticatorData"),
+    ),
     signature: encodeBase64Url(arrayBuffer(response.signature, "signature")),
   });
 }

@@ -43,7 +43,10 @@ export function createOidcClient(options: OidcClientOptions): OidcClient {
     },
     async exchangeCode(input: OidcCodeExchange) {
       if (input.state !== input.request.state)
-        throw new OidcClientError("state-mismatch", "OIDC callback state does not match the stored request.");
+        throw new OidcClientError(
+          "state-mismatch",
+          "OIDC callback state does not match the stored request.",
+        );
       const discovered = await this.discover();
       const tokens = await exchangeOidcCode(request, discovered, options, input);
       let jwksCalls = 0;
@@ -53,16 +56,22 @@ export function createOidcClient(options: OidcClientOptions): OidcClient {
         const response = await request(discovered.jwks_uri);
         if (!response.ok) throw new Error(`JWKS request failed with HTTP ${response.status}.`);
         const value: unknown = await response.json();
-        if (!value || typeof value !== "object" || !Array.isArray((value as JsonWebKeySet).keys)) throw new Error("JWKS response is invalid.");
+        if (!value || typeof value !== "object" || !Array.isArray((value as JsonWebKeySet).keys))
+          throw new Error("JWKS response is invalid.");
         return (jwksCache = value as JsonWebKeySet);
       };
       try {
         const principal = await validateOidcIdToken(tokens.id_token!, {
-          issuer: discovered.issuer, audience: options.clientId, nonce: input.request.nonce, jwks,
+          issuer: discovered.issuer,
+          audience: options.clientId,
+          nonce: input.request.nonce,
+          jwks,
         });
         return { tokens, principal };
       } catch (cause) {
-        throw new OidcClientError("invalid-id-token", "OIDC ID token validation failed.", { cause });
+        throw new OidcClientError("invalid-id-token", "OIDC ID token validation failed.", {
+          cause,
+        });
       }
     },
   };
