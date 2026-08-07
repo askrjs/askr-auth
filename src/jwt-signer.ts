@@ -39,13 +39,9 @@ const timedClaims = new Set(["iss", "sub", "aud", "iat", "exp", "jti"]);
 export function createJwtSigner(options: JwtSignerOptions): JwtSigner {
   if (!options.kid) throw new TypeError("JWT signer requires a non-empty kid.");
   const algorithm = resolveJwtAlgorithm(options.privateKey as AskrJsonWebKey);
-  const imported = crypto.subtle.importKey(
-    "jwk",
-    options.privateKey,
-    algorithm.import,
-    false,
-    ["sign"],
-  );
+  const imported = crypto.subtle.importKey("jwk", options.privateKey, algorithm.import, false, [
+    "sign",
+  ]);
   return Object.freeze({
     async sign(input: JwtSignInput): Promise<string> {
       const protectedHeader = input.protectedHeader ?? {};

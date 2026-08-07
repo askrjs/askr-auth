@@ -24,21 +24,33 @@ function algorithm(element: XmlElement, child: string): string {
 }
 
 function validateAlgorithms(signature: XmlElement, expectedId: string): void {
-  if (!signatures.has(algorithm(signature, "SignatureMethod"))) unsupported("Signature algorithm is not allowed");
+  if (!signatures.has(algorithm(signature, "SignatureMethod")))
+    unsupported("Signature algorithm is not allowed");
   const canonicalization = algorithm(signature, "CanonicalizationMethod");
-  if (canonicalization !== "http://www.w3.org/2001/10/xml-exc-c14n#") unsupported("Canonicalization algorithm is not allowed");
+  if (canonicalization !== "http://www.w3.org/2001/10/xml-exc-c14n#")
+    unsupported("Canonicalization algorithm is not allowed");
   const references = elements(signature, NS.ds, "Reference");
-  if (references.length !== 1 || references[0].getAttribute("URI") !== `#${expectedId}`) unsupported("Signature must reference its containing element");
-  if (!digests.has(algorithm(references[0], "DigestMethod"))) unsupported("Digest algorithm is not allowed");
-  const values = elements(references[0], NS.ds, "Transform").map((node) => node.getAttribute("Algorithm") ?? "");
-  if (values.length < 1 || values.some((value) => !transforms.has(value))) unsupported("Signature transform is not allowed");
+  if (references.length !== 1 || references[0].getAttribute("URI") !== `#${expectedId}`)
+    unsupported("Signature must reference its containing element");
+  if (!digests.has(algorithm(references[0], "DigestMethod")))
+    unsupported("Digest algorithm is not allowed");
+  const values = elements(references[0], NS.ds, "Transform").map(
+    (node) => node.getAttribute("Algorithm") ?? "",
+  );
+  if (values.length < 1 || values.some((value) => !transforms.has(value)))
+    unsupported("Signature transform is not allowed");
 }
 
-export function verifySignedElement(documentXml: string, element: XmlElement, certificates: readonly string[]): string {
+export function verifySignedElement(
+  documentXml: string,
+  element: XmlElement,
+  certificates: readonly string[],
+): string {
   const id = element.getAttribute("ID");
   if (!id) throw new SamlValidationError("invalid-claim", "Signed element has no ID");
   const signatureNodes = children(element, NS.ds, "Signature");
-  if (signatureNodes.length !== 1) throw new SamlValidationError("invalid-signature", "Expected one direct signature");
+  if (signatureNodes.length !== 1)
+    throw new SamlValidationError("invalid-signature", "Expected one direct signature");
   validateAlgorithms(signatureNodes[0], id);
   for (const certificate of certificates) {
     try {
@@ -47,28 +59,62 @@ export function verifySignedElement(documentXml: string, element: XmlElement, ce
       if (!verifier.checkSignature(documentXml)) continue;
       const references = verifier.getSignedReferences();
       if (references.length === 1) return references[0];
-    } catch { /* certificate rollover */ }
+    } catch {
+      /* certificate rollover */
+    }
   }
   throw new SamlValidationError("invalid-signature", "SAML signature verification failed");
 }
 
-export async function decryptAssertion(encrypted: XmlElement, privateKey: JsonWebKey): Promise<string> {
+export async function decryptAssertion(
+  encrypted: XmlElement,
+  privateKey: JsonWebKey,
+): Promise<string> {
   const encryptedData = children(encrypted, NS.enc, "EncryptedData");
-  const dataAlgorithms = encryptedData.flatMap((data) => children(data, NS.enc, "EncryptionMethod")).map((node) => node.getAttribute("Algorithm"));
+  const dataAlgorithms = encryptedData
+    .flatMap((data) => children(data, NS.enc, "EncryptionMethod"))
+    .map((node) => node.getAttribute("Algorithm"));
   const encryptedKeys = elements(encrypted, NS.enc, "EncryptedKey");
-  const keyAlgorithms = encryptedKeys.flatMap((key) => children(key, NS.enc, "EncryptionMethod")).map((node) => node.getAttribute("Algorithm"));
+  const keyAlgorithms = encryptedKeys
+    .flatMap((key) => children(key, NS.enc, "EncryptionMethod"))
+    .map((node) => node.getAttribute("Algorithm"));
   const rsaOaep = "http://www.w3.org/2001/04/xmlenc#rsa-oaep-mgf1p";
-  const aes = new Set(["http://www.w3.org/2009/xmlenc11#aes128-gcm", "http://www.w3.org/2009/xmlenc11#aes256-gcm"]);
-  if (keyAlgorithms.length !== 1 || keyAlgorithms[0] !== rsaOaep || dataAlgorithms.length !== 1 || !aes.has(dataAlgorithms[0] ?? "")) {
+  const aes = new Set([
+    "http://www.w3.org/2009/xmlenc11#aes128-gcm",
+    "http://www.w3.org/2009/xmlenc11#aes256-gcm",
+  ]);
+  if (
+    keyAlgorithms.length !== 1 ||
+    keyAlgorithms[0] !== rsaOaep ||
+    dataAlgorithms.length !== 1 ||
+    !aes.has(dataAlgorithms[0] ?? "")
+  ) {
     unsupported("Encryption algorithm is not allowed");
   }
-  const pem = createPrivateKey({ key: privateKey, format: "jwk" }).export({ type: "pkcs8", format: "pem" });
-  return await new Promise((resolve, reject) => decrypt(serialize(encrypted), { key: pem, disallowDecryptionWithInsecureAlgorithm: true }, (error, result) => {
-    if (error || !result) reject(new SamlValidationError("invalid-signature", "Assertion decryption failed"));
-    else {
-      try { parseXml(result); resolve(result); } catch { reject(new SamlValidationError("malformed-response", "Decrypted assertion is malformed")); }
-    }
-  }));
+  const pem = createPrivateKey({ key: privateKey, format: "jwk" }).export({
+    type: "pkcs8",
+    format: "pem",
+  });
+  return await new Promise((resolve, reject) =>
+    decrypt(
+      serialize(encrypted),
+      { key: pem, disallowDecryptionWithInsecureAlgorithm: true },
+      (error, result) => {
+        if (error || !result)
+          reject(new SamlValidationError("invalid-signature", "Assertion decryption failed"));
+        else {
+          try {
+            parseXml(result);
+            resolve(result);
+          } catch {
+            reject(
+              new SamlValidationError("malformed-response", "Decrypted assertion is malformed"),
+            );
+          }
+        }
+      },
+    ),
+  );
 }
 
 function unsupported(message: string): never {

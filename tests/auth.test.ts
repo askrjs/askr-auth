@@ -33,13 +33,33 @@ const oidcFetch = async (input: RequestInfo | URL) => {
 describe("OIDC client", () => {
   it("should give state-mismatch without network access when callback state differs", async () => {
     let calls = 0;
-    const client = createOidcClient({ issuer: oidcMetadata.issuer, clientId: "askr-client", redirectUri: "https://app.example.test/callback", fetch: async () => { calls++; throw new Error("unexpected"); } });
-    await expect(client.exchangeCode({ code: "code-1", state: "wrong", request: { state: "stored", nonce: "nonce-1", codeVerifier: "verifier" } })).rejects.toMatchObject({ code: "state-mismatch" });
+    const client = createOidcClient({
+      issuer: oidcMetadata.issuer,
+      clientId: "askr-client",
+      redirectUri: "https://app.example.test/callback",
+      fetch: async () => {
+        calls++;
+        throw new Error("unexpected");
+      },
+    });
+    await expect(
+      client.exchangeCode({
+        code: "code-1",
+        state: "wrong",
+        request: { state: "stored", nonce: "nonce-1", codeVerifier: "verifier" },
+      }),
+    ).rejects.toMatchObject({ code: "state-mismatch" });
     expect(calls).toBe(0);
   });
 
   it("should give invalid-metadata when discovery issuer does not exactly match", async () => {
-    const client = createOidcClient({ issuer: oidcMetadata.issuer, clientId: "askr-client", redirectUri: "https://app.example.test/callback", fetch: async () => new Response(JSON.stringify({ ...oidcMetadata, issuer: `${oidcMetadata.issuer}/other` })) });
+    const client = createOidcClient({
+      issuer: oidcMetadata.issuer,
+      clientId: "askr-client",
+      redirectUri: "https://app.example.test/callback",
+      fetch: async () =>
+        new Response(JSON.stringify({ ...oidcMetadata, issuer: `${oidcMetadata.issuer}/other` })),
+    });
     await expect(client.discover()).rejects.toMatchObject({ code: "invalid-metadata" });
   });
 
@@ -95,7 +115,15 @@ describe("OIDC client", () => {
       return new Response(
         JSON.stringify({
           access_token: "access-1",
-          id_token: token({ ...validPayload, iss: oidcMetadata.issuer, aud: "askr-client", nonce: "nonce-1", iat: Math.floor(Date.now() / 1000), nbf: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 300 }),
+          id_token: token({
+            ...validPayload,
+            iss: oidcMetadata.issuer,
+            aud: "askr-client",
+            nonce: "nonce-1",
+            iat: Math.floor(Date.now() / 1000),
+            nbf: Math.floor(Date.now() / 1000),
+            exp: Math.floor(Date.now() / 1000) + 300,
+          }),
           token_type: "Bearer",
           expires_in: 300,
         }),
@@ -110,7 +138,8 @@ describe("OIDC client", () => {
     });
 
     const exchanged = await client.exchangeCode({
-      code: "code-1", state: "state-1",
+      code: "code-1",
+      state: "state-1",
       request: { state: "state-1", nonce: "nonce-1", codeVerifier: "test-verifier" },
     });
     expect(exchanged.principal).toMatchObject({ id: "user-1", nonce: "nonce-1" });
@@ -158,7 +187,21 @@ describe("OIDC client", () => {
       }
       if (String(input) === oidcMetadata.jwks_uri) return new Response(JSON.stringify(jwks));
       tokenInit = init;
-      return new Response(JSON.stringify({ access_token: "access-1", token_type: "Bearer", id_token: token({ ...validPayload, iss: oidcMetadata.issuer, aud: "askr-client", nonce: "nonce-1", iat: Math.floor(Date.now() / 1000), nbf: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 300 }) }));
+      return new Response(
+        JSON.stringify({
+          access_token: "access-1",
+          token_type: "Bearer",
+          id_token: token({
+            ...validPayload,
+            iss: oidcMetadata.issuer,
+            aud: "askr-client",
+            nonce: "nonce-1",
+            iat: Math.floor(Date.now() / 1000),
+            nbf: Math.floor(Date.now() / 1000),
+            exp: Math.floor(Date.now() / 1000) + 300,
+          }),
+        }),
+      );
     };
     const client = createOidcClient({
       issuer: "https://login.example.test",
@@ -168,7 +211,11 @@ describe("OIDC client", () => {
       fetch,
     });
 
-    await client.exchangeCode({ code: "code-1", state: "state-1", request: { state: "state-1", nonce: "nonce-1", codeVerifier: "test-verifier" } });
+    await client.exchangeCode({
+      code: "code-1",
+      state: "state-1",
+      request: { state: "state-1", nonce: "nonce-1", codeVerifier: "test-verifier" },
+    });
     expect(new Headers(tokenInit?.headers).get("authorization")).toBe(
       `Basic ${btoa("askr-client:client-secret")}`,
     );
@@ -189,9 +236,7 @@ function token(
   algorithm = "RS256",
   protectedHeader: Record<string, unknown> = {},
 ) {
-  const header = base64url(
-    JSON.stringify({ alg: algorithm, kid, typ: "JWT", ...protectedHeader }),
-  );
+  const header = base64url(JSON.stringify({ alg: algorithm, kid, typ: "JWT", ...protectedHeader }));
   const body = base64url(JSON.stringify(payload));
   const input = `${header}.${body}`;
   const signature =
@@ -245,17 +290,22 @@ describe("JWT resource server", () => {
     ["expiration", { exp: now - 1 }],
     ["not-before", { nbf: now + 1 }],
     ["issued-at", { iat: now + 1 }],
-  ])("should give the expected result when reject a token with an invalid %s claim", async (_name, change) => {
-    const validator = createJwtValidator({
-      issuer: validPayload.iss,
-      audience: validPayload.aud,
-      jwks,
-      clock: () => now,
-    });
-    await expect(validator.validate(token({ ...validPayload, ...change }))).rejects.toMatchObject({
-      code: "invalid_claim",
-    });
-  });
+  ])(
+    "should give the expected result when reject a token with an invalid %s claim",
+    async (_name, change) => {
+      const validator = createJwtValidator({
+        issuer: validPayload.iss,
+        audience: validPayload.aud,
+        jwks,
+        clock: () => now,
+      });
+      await expect(validator.validate(token({ ...validPayload, ...change }))).rejects.toMatchObject(
+        {
+          code: "invalid_claim",
+        },
+      );
+    },
+  );
 
   it("should give the expected result when reject alg none and unknown key ids", async () => {
     const validator = createJwtValidator({ issuer: validPayload.iss, jwks, clock: () => now });
@@ -296,9 +346,9 @@ describe("JWT resource server", () => {
       { jwksRefreshCooldownSeconds: -1 },
       { unknownKeyCacheSeconds: Number.POSITIVE_INFINITY },
     ])
-      expect(() =>
-        createJwtValidator({ issuer: validPayload.iss, jwks, ...options }),
-      ).toThrow(TypeError);
+      expect(() => createJwtValidator({ issuer: validPayload.iss, jwks, ...options })).toThrow(
+        TypeError,
+      );
 
     const validator = createJwtValidator({
       issuer: validPayload.iss,
@@ -339,9 +389,13 @@ describe("JWT resource server", () => {
       validator.validate(forged),
     ];
     release!();
-    await Promise.all(attempts.map((attempt) => expect(attempt).rejects.toMatchObject({
-      code: "unknown_key",
-    })));
+    await Promise.all(
+      attempts.map((attempt) =>
+        expect(attempt).rejects.toMatchObject({
+          code: "unknown_key",
+        }),
+      ),
+    );
     expect(calls).toBe(2);
     await expect(validator.validate(forged)).rejects.toMatchObject({ code: "unknown_key" });
     expect(calls).toBe(2);
@@ -442,11 +496,10 @@ describe("JWT issuer algorithms", () => {
   });
 
   it("should give the expected result when issue and validate ES256 with a Web Crypto P-256 key", async () => {
-    const pair = (await crypto.subtle.generateKey(
-      { name: "ECDSA", namedCurve: "P-256" },
-      true,
-      ["sign", "verify"],
-    )) as CryptoKeyPair;
+    const pair = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+      "sign",
+      "verify",
+    ])) as CryptoKeyPair;
     const privateKey = await crypto.subtle.exportKey("jwk", pair.privateKey);
     expect(privateKey.key_ops).toEqual(["sign"]);
     const issuer = createJwtIssuer({ ...issuerOptions, privateKey });
@@ -479,7 +532,10 @@ describe("JWT issuer algorithms", () => {
       clock: () => now,
     });
 
-    await expect(validator.validate(`${input}.${signature}`)).resolves.toHaveProperty("id", "user-1");
+    await expect(validator.validate(`${input}.${signature}`)).resolves.toHaveProperty(
+      "id",
+      "user-1",
+    );
     const invalid = `${input}.${signature[0] === "A" ? "B" : "A"}${signature.slice(1)}`;
     await expect(validator.validate(invalid)).rejects.toMatchObject({ code: "invalid_signature" });
   });
@@ -487,16 +543,19 @@ describe("JWT issuer algorithms", () => {
   it.each([
     ["RS256", { kty: "EC", crv: "P-256", x: "x", y: "y", kid: "mixed" }],
     ["ES256", { ...jwk, kid: "mixed" }],
-  ])("should give the expected result when reject %s headers paired with a different key shape", async (alg, mixedKey) => {
-    const validator = createJwtValidator({
-      issuer: validPayload.iss,
-      jwks: { keys: [mixedKey] },
-      clock: () => now,
-    });
-    await expect(validator.validate(token(validPayload, "mixed", alg))).rejects.toMatchObject({
-      code: "unsupported_algorithm",
-    });
-  });
+  ])(
+    "should give the expected result when reject %s headers paired with a different key shape",
+    async (alg, mixedKey) => {
+      const validator = createJwtValidator({
+        issuer: validPayload.iss,
+        jwks: { keys: [mixedKey] },
+        clock: () => now,
+      });
+      await expect(validator.validate(token(validPayload, "mixed", alg))).rejects.toMatchObject({
+        code: "unsupported_algorithm",
+      });
+    },
+  );
 
   it("should give the expected result when reject unsupported curves and conflicting JWK algorithm metadata", async () => {
     expect(() =>
