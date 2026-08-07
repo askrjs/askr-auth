@@ -39,7 +39,9 @@ export interface SamlPrincipal extends Principal {
 
 export interface SamlServiceProvider {
   metadata(): string;
-  createAuthnRequest(options?: { relayState?: string }): Promise<{ url: string; requestId: string }>;
+  createAuthnRequest(options?: {
+    relayState?: string;
+  }): Promise<{ url: string; requestId: string }>;
   validateResponse(input: { samlResponse: string; relayState?: string }): Promise<SamlPrincipal>;
 }
 

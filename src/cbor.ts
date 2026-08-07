@@ -22,7 +22,8 @@ export function decodeCborFirst(
   const maxBytes = options.maxBytes ?? 65_536;
   const maxDepth = options.maxDepth ?? 16;
   const maxCollection = options.maxCollectionLength ?? 1_024;
-  if (!(input instanceof Uint8Array) || input.length > maxBytes) malformed("CBOR input is invalid or too large.");
+  if (!(input instanceof Uint8Array) || input.length > maxBytes)
+    malformed("CBOR input is invalid or too large.");
   const view = new DataView(input.buffer, input.byteOffset, input.byteLength);
   let offset = 0;
   const take = (count: number) => {
@@ -33,15 +34,31 @@ export function decodeCborFirst(
   };
   const length = (additional: number): number => {
     if (additional < 24) return additional;
-    const width = additional === 24 ? 1 : additional === 25 ? 2 : additional === 26 ? 4 : additional === 27 ? 8 : 0;
+    const width =
+      additional === 24
+        ? 1
+        : additional === 25
+          ? 2
+          : additional === 26
+            ? 4
+            : additional === 27
+              ? 8
+              : 0;
     if (!width) malformed("Indefinite or reserved CBOR lengths are unsupported.");
     if (offset + width > input.length) malformed("CBOR length is truncated.");
     let value: number;
     if (width === 8) {
       const large = view.getBigUint64(offset);
-      if (large > BigInt(Number.MAX_SAFE_INTEGER)) malformed("CBOR integer exceeds the safe range.");
+      if (large > BigInt(Number.MAX_SAFE_INTEGER))
+        malformed("CBOR integer exceeds the safe range.");
       value = Number(large);
-    } else value = width === 1 ? view.getUint8(offset) : width === 2 ? view.getUint16(offset) : view.getUint32(offset);
+    } else
+      value =
+        width === 1
+          ? view.getUint8(offset)
+          : width === 2
+            ? view.getUint16(offset)
+            : view.getUint32(offset);
     offset += width;
     const minimum = width === 1 ? 24 : width === 2 ? 256 : width === 4 ? 65_536 : 4_294_967_296;
     if (value < minimum) malformed("CBOR length or integer is not minimally encoded.");
@@ -73,7 +90,8 @@ export function decodeCborFirst(
       const keys = new Set<string>();
       for (let index = 0; index < count; index++) {
         const key = parse(depth + 1);
-        const identity = typeof key === "string" ? `s:${key}` : typeof key === "number" ? `n:${key}` : "";
+        const identity =
+          typeof key === "string" ? `s:${key}` : typeof key === "number" ? `n:${key}` : "";
         if (!identity) malformed("CBOR map keys must be strings or integers.");
         if (keys.has(identity)) malformed("CBOR map contains a duplicate key.");
         keys.add(identity);

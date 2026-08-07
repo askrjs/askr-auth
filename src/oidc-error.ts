@@ -8,7 +8,11 @@ export type OidcClientErrorCode =
 
 export class OidcClientError extends Error {
   readonly name = "OidcClientError";
-  constructor(readonly code: OidcClientErrorCode, message: string, options?: ErrorOptions) {
+  constructor(
+    readonly code: OidcClientErrorCode,
+    message: string,
+    options?: ErrorOptions,
+  ) {
     super(message, options);
   }
 }

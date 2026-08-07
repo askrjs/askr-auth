@@ -31,9 +31,7 @@ export function resolveJwtAlgorithm(key: AskrJsonWebKey): JwtAlgorithm {
     (candidate) => candidate.kty === key.kty && candidate.crv === key.crv,
   );
   if (!algorithm)
-    throw new TypeError(
-      `Unsupported JWT key shape: ${key.kty ?? "missing"}/${key.crv ?? "none"}.`,
-    );
+    throw new TypeError(`Unsupported JWT key shape: ${key.kty ?? "missing"}/${key.crv ?? "none"}.`);
 
   if (key.alg !== undefined && key.alg !== algorithm.jwt)
     throw new TypeError(`JWK alg ${key.alg} conflicts with ${algorithm.jwt} key shape.`);

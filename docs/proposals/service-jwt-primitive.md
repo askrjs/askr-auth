@@ -7,7 +7,7 @@ Status: implemented in `@askrjs/auth@0.0.6`.
 `createJwtIssuer`/`JwtIssuerOptions`/`JwtIssueInput` are built specifically for the end-user
 `Principal` token profile: `subject` plus arbitrary non-reserved Principal claims, a fixed
 `typ: "JWT"`, and a generated `jti`. That's the right shape for access tokens and session cookies,
-but it's the wrong tool for a *different* token profile a consumer legitimately needs to
+but it's the wrong tool for a _different_ token profile a consumer legitimately needs to
 mint: a short-lived service-to-service credential with its own `typ`, a `jti`, and claims that
 have nothing to do with a `Principal` (a `scope`, a `realm`, whatever the receiving system's
 authorization model expects).
@@ -56,7 +56,14 @@ declare function createJwtSigner(options: JwtSignerOptions): JwtSigner;
  * `randomUUID()` themselves, while leaving `sub`/`aud`/`typ`/every other claim fully caller-owned. */
 declare function issueTimedJwt(
   signer: JwtSigner,
-  input: { issuer: string; subject: string; audience: string | readonly string[]; ttlSeconds: number; typ: string; claims?: Record<string, unknown> },
+  input: {
+    issuer: string;
+    subject: string;
+    audience: string | readonly string[];
+    ttlSeconds: number;
+    typ: string;
+    claims?: Record<string, unknown>;
+  },
 ): Promise<string>;
 ```
 
@@ -74,7 +81,7 @@ validating against.
 
 ## Non-goals
 
-- A general "arbitrary JWT" builder with no opinions at all — the goal is removing the *crypto*
+- A general "arbitrary JWT" builder with no opinions at all — the goal is removing the _crypto_
   duplication (correct r‖s signature encoding, JWK→KeyObject import, base64url JWS assembly), not
   making every claim-shape decision for the caller.
 - Validation/verification of this profile — out of scope, this is issuer-only, mirroring how

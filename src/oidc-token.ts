@@ -12,7 +12,8 @@ export async function exchangeOidcCode(
   options: OidcClientOptions,
   input: OidcCodeExchange,
 ): Promise<OidcTokenResponse> {
-  const formEncode = (value: string) => new URLSearchParams({ value }).toString().slice("value=".length);
+  const formEncode = (value: string) =>
+    new URLSearchParams({ value }).toString().slice("value=".length);
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code: input.code,
@@ -25,14 +26,26 @@ export async function exchangeOidcCode(
     headers: {
       "content-type": "application/x-www-form-urlencoded",
       ...(options.clientSecret
-        ? { authorization: `Basic ${btoa(`${formEncode(options.clientId)}:${formEncode(options.clientSecret)}`)}` }
+        ? {
+            authorization: `Basic ${btoa(`${formEncode(options.clientId)}:${formEncode(options.clientSecret)}`)}`,
+          }
         : {}),
     },
     body,
   });
   let value: unknown;
-  try { value = await response.json(); } catch (cause) { throw new OidcClientError("invalid-token-response", "OIDC token response is not valid JSON.", { cause }); }
-  if (!response.ok) throw new OidcClientError("exchange-failed", `OIDC token exchange failed with HTTP ${response.status}.`);
+  try {
+    value = await response.json();
+  } catch (cause) {
+    throw new OidcClientError("invalid-token-response", "OIDC token response is not valid JSON.", {
+      cause,
+    });
+  }
+  if (!response.ok)
+    throw new OidcClientError(
+      "exchange-failed",
+      `OIDC token exchange failed with HTTP ${response.status}.`,
+    );
   if (
     !value ||
     typeof value !== "object" ||
@@ -40,7 +53,14 @@ export async function exchangeOidcCode(
   )
     throw new OidcClientError("invalid-token-response", "OIDC token response is invalid.");
   const tokens = value as Partial<OidcTokenResponse>;
-  if (typeof tokens.token_type !== "string" || typeof tokens.id_token !== "string" || !tokens.id_token)
-    throw new OidcClientError("invalid-token-response", "OIDC token response must contain token_type and id_token.");
+  if (
+    typeof tokens.token_type !== "string" ||
+    typeof tokens.id_token !== "string" ||
+    !tokens.id_token
+  )
+    throw new OidcClientError(
+      "invalid-token-response",
+      "OIDC token response must contain token_type and id_token.",
+    );
   return value as OidcTokenResponse;
 }

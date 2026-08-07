@@ -7,13 +7,13 @@ Framework-owned, domain-neutral authentication primitives for Askr. Requires Nod
 
 ## Feature matrix
 
-| Entry | Owns | Does not own |
-| --- | --- | --- |
-| `@askrjs/auth` | `Principal`, auth contexts and requirements, bearer/cookie/session request resolution | Users, organizations, credential storage, password hashing |
-| `@askrjs/auth/jwt` | RS256/ES256 issuance and validation, claims, JWKS rollover | Token persistence or revocation lists |
-| `@askrjs/auth/oidc` | Discovery, authorization-code PKCE, callback correlation, verified ID-token-to-`Principal` exchange | Provider UI, account linking, refresh-token storage |
-| `@askrjs/auth/saml` | SP metadata and requests, signed/encrypted response validation, request correlation | IdP operation, SLO, IdP-initiated SAML, external CA trust policy |
-| `@askrjs/auth/mfa` | TOTP, bounded CBOR/COSE, WebAuthn registration and authentication verification | Credential storage, recovery policy, enrollment UI |
+| Entry               | Owns                                                                                                | Does not own                                                     |
+| ------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `@askrjs/auth`      | `Principal`, auth contexts and requirements, bearer/cookie/session request resolution               | Users, organizations, credential storage, password hashing       |
+| `@askrjs/auth/jwt`  | RS256/ES256 issuance and validation, claims, JWKS rollover                                          | Token persistence or revocation lists                            |
+| `@askrjs/auth/oidc` | Discovery, authorization-code PKCE, callback correlation, verified ID-token-to-`Principal` exchange | Provider UI, account linking, refresh-token storage              |
+| `@askrjs/auth/saml` | SP metadata and requests, signed/encrypted response validation, request correlation                 | IdP operation, SLO, IdP-initiated SAML, external CA trust policy |
+| `@askrjs/auth/mfa`  | TOTP, bounded CBOR/COSE, WebAuthn registration and authentication verification                      | Credential storage, recovery policy, enrollment UI               |
 
 Replay prevention stays with the application’s durable storage boundary. SAML requires atomic
 `requestStore.consume()`. TOTP returns the accepted counter so it can be atomically marked used.
@@ -62,7 +62,11 @@ import { createSamlServiceProvider } from "@askrjs/auth/saml";
 const saml = createSamlServiceProvider({
   entityId: "https://app.example.com/saml/metadata",
   acsUrl: "https://app.example.com/saml/acs",
-  idp: { entityId: "https://idp.example.com", ssoUrl: "https://idp.example.com/sso", certificates: [idpCertificate] },
+  idp: {
+    entityId: "https://idp.example.com",
+    ssoUrl: "https://idp.example.com/sso",
+    certificates: [idpCertificate],
+  },
   requestStore, // save/get plus an atomic consume operation
 });
 
