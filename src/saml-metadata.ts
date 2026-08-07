@@ -9,6 +9,7 @@ function certificateBody(pem: string): string {
 export function createMetadata(options: SamlServiceProviderOptions): string {
   const doc = new DOMImplementation().createDocument(NS.metadata, "md:EntityDescriptor", null);
   const root = doc.documentElement;
+  if (!root) throw new Error("Failed to create SAML metadata document root.");
   root.setAttribute("entityID", options.entityId);
   root.setAttribute("xmlns:md", NS.metadata);
   root.setAttribute("xmlns:ds", NS.ds);
