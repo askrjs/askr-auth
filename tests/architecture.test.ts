@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 const root = resolve(import.meta.dirname, "..");
 
 describe("package architecture", () => {
-  it("should give the expected result when keep public index barrels re-export only", () => {
+  it("should keep public index barrels re-export only", () => {
     for (const file of ["src/index.ts", "src/jwt.ts", "src/oidc.ts", "src/saml.ts", "src/mfa.ts"]) {
       const source = readFileSync(resolve(root, file), "utf8");
       expect(
@@ -17,7 +17,7 @@ describe("package architecture", () => {
     }
   });
 
-  it("should give the expected result when keep production modules within the clean-break size limit", () => {
+  it("should keep production modules within the clean-break size limit", () => {
     for (const file of [
       "src/auth-cookie.ts",
       "src/auth-resolver.ts",
