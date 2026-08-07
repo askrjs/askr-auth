@@ -12,6 +12,7 @@ export async function createRequest(options: SamlServiceProviderOptions, relaySt
   const requestId = `_askr_${randomBytes(20).toString("hex")}`;
   const doc = new DOMImplementation().createDocument(NS.protocol, "samlp:AuthnRequest", null);
   const root = doc.documentElement;
+  if (!root) throw new Error("Failed to create SAML request document root.");
   root.setAttribute("xmlns:samlp", NS.protocol); root.setAttribute("xmlns:saml", NS.assertion);
   root.setAttribute("ID", requestId); root.setAttribute("Version", "2.0");
   root.setAttribute("IssueInstant", new Date(now).toISOString()); root.setAttribute("Destination", options.idp.ssoUrl);

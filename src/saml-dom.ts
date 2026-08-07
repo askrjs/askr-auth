@@ -1,5 +1,8 @@
-import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
+import { DOMParser, XMLSerializer, type Document, type Element, type Node } from "@xmldom/xmldom";
 import { SamlValidationError } from "./saml-types";
+
+export type XmlDocument = Document & { readonly documentElement: Element };
+export type XmlElement = Element;
 
 export const NS = {
   assertion: "urn:oasis:names:tc:SAML:2.0:assertion",
@@ -11,16 +14,24 @@ export const NS = {
 
 export const serialize = (node: Node): string => new XMLSerializer().serializeToString(node);
 
-export function parseXml(xml: string): Document {
+export function parseXml(xml: string): XmlDocument {
   if (/<!DOCTYPE|<!ENTITY/iu.test(xml)) fail("DTD and entity declarations are forbidden");
   const errors: string[] = [];
-  const document = new DOMParser({
-    errorHandler: { warning: () => undefined, error: (e) => errors.push(String(e)), fatalError: (e) => errors.push(String(e)) },
-  }).parseFromString(xml, "application/xml");
+  const document = (() => {
+    try {
+      return new DOMParser({
+        onError: (level, message) => {
+          if (level !== "warning") errors.push(message);
+        },
+      }).parseFromString(xml, "application/xml");
+    } catch {
+      fail("Malformed XML");
+    }
+  })();
   if (errors.length || !document.documentElement || document.getElementsByTagName("parsererror").length) {
     fail("Malformed XML");
   }
-  return document;
+  return document as XmlDocument;
 }
 
 export function elements(parent: Node, namespace: string, localName: string): Element[] {

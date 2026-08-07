@@ -15,5 +15,8 @@ export default defineConfig({
     platform: "neutral",
     dts: true,
     sourcemap: "hidden",
+    deps: {
+      neverBundle: [/^node:/],
+    },
   },
 });

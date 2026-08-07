@@ -6,9 +6,9 @@
     "askr",
     "authentication",
     "authorization",
+    "mfa",
     "oidc",
     "saml",
-    "mfa",
     "totp",
     "webauthn"
   ],
@@ -73,20 +73,20 @@
     "prepack": "npm run build",
     "prepublishOnly": "npm run check"
   },
+  "dependencies": {
+    "@xmldom/xmldom": "0.9.10",
+    "xml-crypto": "6.1.2",
+    "xml-encryption": "5.0.0"
+  },
   "devDependencies": {
-    "@types/node": "^26.1.1",
-    "publint": "^0.3.21",
-    "typescript": "^6.0.0",
-    "vite-plus": "^0.2.4",
-    "vitest": "^4.0.0"
+    "@types/node": "^26.1.2",
+    "publint": "^0.3.23",
+    "typescript": "^7.0.2",
+    "vite-plus": "^0.2.8",
+    "vitest": "^4.1.10"
   },
   "engines": {
     "node": ">=24.0.0"
   },
-  "packageManager": "npm@12.0.1",
-  "dependencies": {
-    "@xmldom/xmldom": "0.8.13",
-    "xml-crypto": "6.1.2",
-    "xml-encryption": "5.0.0"
-  }
+  "packageManager": "npm@12.0.1"
 }
