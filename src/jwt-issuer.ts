@@ -4,6 +4,7 @@ import { resolveJwtAlgorithm } from "./jwt-algorithm";
 import type { AskrJsonWebKey, JwtIssuer, JwtIssuerOptions } from "./jwt-types";
 
 const reserved = new Set(["id", "sub", "iss", "aud", "iat", "exp", "jti", "nbf", "alg", "kid"]);
+/** Create an issuer that signs and validates its own JWTs. @param options Issuer key and claim configuration. @returns Configured JWT issuer. */
 export function createJwtIssuer(options: JwtIssuerOptions): JwtIssuer {
   if (!options.kid || !options.issuer || options.ttlSeconds <= 0)
     throw new TypeError("JWT issuer configuration is invalid.");

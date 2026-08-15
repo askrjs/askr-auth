@@ -10,6 +10,7 @@ import type {
   OidcIdTokenOptions,
 } from "./jwt-types";
 
+/** Create a JWT validator with issuer, audience, key-refresh, and clock policy. @param options Validation policy. @returns Configured JWT validator. */
 export function createJwtValidator(options: JwtValidatorOptions): JwtValidator {
   const clock = options.clock ?? (() => Math.floor(Date.now() / 1000));
   const skew = options.clockSkewSeconds ?? 0;
@@ -144,6 +145,7 @@ export function createJwtValidator(options: JwtValidatorOptions): JwtValidator {
   };
 }
 
+/** Validate an OIDC ID token, including its nonce claim. @param token Compact serialized ID token. @param options OIDC validation policy. @returns Validated principal claims. */
 export async function validateOidcIdToken(
   token: string,
   options: OidcIdTokenOptions,

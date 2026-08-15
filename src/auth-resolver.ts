@@ -12,6 +12,7 @@ const anonymous = <P extends Principal, S extends AuthSession>(): AuthContext<P,
 const usable = (session: AuthSession, now: number) =>
   session.revokedAt === undefined && (session.expiresAt === undefined || session.expiresAt > now);
 
+/** Create a request authentication resolver for bearer tokens, cookies, and sessions. @param options Authentication dependencies and policy. @returns Configured request resolver. */
 export function createAuth<P extends Principal = Principal, S extends AuthSession = AuthSession>(
   options: AuthOptions<P, S> = {},
 ): AuthResolver<P, S> {
