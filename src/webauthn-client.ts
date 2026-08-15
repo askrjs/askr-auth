@@ -1,33 +1,56 @@
+/** Registration ceremony inputs for creating a passkey. */
 export interface CreatePasskeyOptions {
+  /** Base64url challenge from the server. */
   readonly challenge: string;
+  /** Relying-party identifier. */
   readonly rpId: string;
+  /** Human-readable relying-party name. */
   readonly rpName: string;
+  /** Base64url user identifier. */
   readonly userId: string;
+  /** User name displayed by the authenticator. */
   readonly userName: string;
+  /** Human-readable user display name. */
   readonly userDisplayName: string;
+  /** Required user-verification policy. */
   readonly userVerification?: UserVerificationRequirement;
 }
 
+/** Client-safe registration credential returned to the server. */
 export interface PasskeyRegistration {
+  /** Base64url credential identifier. */
   readonly credentialId: string;
+  /** Browser client-data JSON. */
   readonly clientDataJSON: string;
+  /** Browser attestation object. */
   readonly attestationObject: string;
 }
 
+/** Authentication ceremony inputs for requesting a passkey assertion. */
 export interface GetPasskeyAssertionOptions {
+  /** Base64url challenge from the server. */
   readonly challenge: string;
+  /** Relying-party identifier. */
   readonly rpId: string;
+  /** Optional allow-list of credential identifiers. */
   readonly allowCredentials?: readonly string[];
+  /** Required user-verification policy. */
   readonly userVerification?: UserVerificationRequirement;
 }
 
+/** Client-safe assertion returned to the server. */
 export interface PasskeyAssertion {
+  /** Base64url credential identifier. */
   readonly credentialId: string;
+  /** Browser client-data JSON. */
   readonly clientDataJSON: string;
+  /** Authenticator data. */
   readonly authenticatorData: string;
+  /** Assertion signature. */
   readonly signature: string;
 }
 
+/** Encode binary data as unpadded base64url. @param buffer Bytes to encode. @returns Canonical base64url text. */
 export function encodeBase64Url(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = "";
@@ -35,6 +58,7 @@ export function encodeBase64Url(buffer: ArrayBuffer): string {
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
 }
 
+/** Decode canonical unpadded base64url. @param value Base64url text. @returns Decoded bytes. */
 export function decodeBase64Url(value: string): ArrayBuffer {
   if (!/^[A-Za-z0-9_-]*$/u.test(value) || value.length % 4 === 1)
     throw new TypeError("Value must be canonical base64url without padding.");
@@ -75,6 +99,7 @@ function arrayBuffer(value: unknown, field: string): ArrayBuffer {
   return value;
 }
 
+/** Create a passkey through the browser WebAuthn API. @param options Registration ceremony options. @returns Credential data suitable for server registration. */
 export async function createPasskey(options: CreatePasskeyOptions): Promise<PasskeyRegistration> {
   const credential = publicKeyCredential(
     await credentials().create({
@@ -110,6 +135,7 @@ export async function createPasskey(options: CreatePasskeyOptions): Promise<Pass
   });
 }
 
+/** Request a passkey assertion through the browser WebAuthn API. @param options Authentication ceremony options. @returns Assertion data suitable for server verification. */
 export async function getPasskeyAssertion(
   options: GetPasskeyAssertionOptions,
 ): Promise<PasskeyAssertion> {
@@ -137,3 +163,5 @@ export async function getPasskeyAssertion(
     signature: encodeBase64Url(arrayBuffer(response.signature, "signature")),
   });
 }
+  /** Optional allow-list of credential identifiers. */
+  /** Required user-verification policy. */

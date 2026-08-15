@@ -15,6 +15,7 @@ import type {
 
 export * from "./oidc-types";
 
+/** Create an OIDC client with discovery caching and ID-token validation. @param options Provider and client configuration. @returns Configured OIDC client. */
 export function createOidcClient(options: OidcClientOptions): OidcClient {
   const issuer = options.issuer;
   const request = options.fetch ?? globalThis.fetch.bind(globalThis);

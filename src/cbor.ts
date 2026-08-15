@@ -1,13 +1,20 @@
 import { MfaValidationError } from "./mfa-error";
 
+/** Resource limits applied while decoding CBOR. */
 export interface CborDecodeOptions {
+  /** Maximum encoded input bytes. */
   maxBytes?: number;
+  /** Maximum nesting depth. */
   maxDepth?: number;
+  /** Maximum array or map entries. */
   maxCollectionLength?: number;
 }
 
+/** Decoded CBOR value and the number of consumed bytes. */
 export interface CborFirstResult {
+  /** Decoded value. */
   value: unknown;
+  /** Number of bytes consumed from the input. */
   bytesRead: number;
 }
 
@@ -15,6 +22,7 @@ const malformed = (message: string): never => {
   throw new MfaValidationError("malformed-input", message);
 };
 
+/** Decode the first CBOR value, allowing trailing bytes. @param input Encoded CBOR bytes. @param options Decoder resource limits. @returns Decoded value and consumed byte count. */
 export function decodeCborFirst(
   input: Uint8Array,
   options: CborDecodeOptions = {},
@@ -107,6 +115,7 @@ export function decodeCborFirst(
   return { value: parse(0), bytesRead: offset };
 }
 
+/** Decode one complete CBOR value. @param input Encoded CBOR bytes. @param options Decoder resource limits. @returns Decoded value. */
 export function decodeCbor(input: Uint8Array, options?: CborDecodeOptions): unknown {
   const result = decodeCborFirst(input, options);
   if (result.bytesRead !== input.length) malformed("CBOR input contains trailing data.");

@@ -1,6 +1,6 @@
 {
   "name": "@askrjs/auth",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "Shared authentication contracts and request auth resolution for Askr",
   "keywords": [
     "askr",
