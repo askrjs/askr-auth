@@ -1,15 +1,25 @@
 import { MfaValidationError } from "./mfa-error";
 
+/** Hash algorithms supported by TOTP. */
 export type TotpAlgorithm = "SHA-1" | "SHA-256" | "SHA-512";
+/** Shared TOTP generation and verification settings. */
 export interface TotpOptions {
+  /** HMAC hash algorithm. Defaults to SHA-1. */
   algorithm?: TotpAlgorithm;
+  /** Number of digits in generated codes. */
   digits?: 6 | 8;
+  /** Validity period in seconds. */
   periodSeconds?: number;
 }
+/** Input required to verify one TOTP code. */
 export interface VerifyTotpOptions extends TotpOptions {
+  /** Base32-encoded shared secret. */
   secret: string;
+  /** User-entered one-time code. */
   code: string;
+  /** Verification time; defaults to the current time. */
   at?: number | Date;
+  /** Number of adjacent periods accepted on either side. */
   window?: number;
 }
 
@@ -89,6 +99,7 @@ async function codeAt(
   return String(value).padStart(digits, "0");
 }
 
+/** Generate a cryptographically random Base32 TOTP secret. @param options Secret byte length, from 16 through 128. @returns Base32-encoded secret. */
 export function generateTotpSecret(options: { byteLength?: number } = {}): string {
   const length = options.byteLength ?? 20;
   if (!Number.isInteger(length) || length < 16 || length > 128)
@@ -99,6 +110,7 @@ export function generateTotpSecret(options: { byteLength?: number } = {}): strin
   return encodeSecret(crypto.getRandomValues(new Uint8Array(length)));
 }
 
+/** Build an `otpauth://` URI for authenticator enrollment. @param input Secret, issuer, account, and TOTP settings. @returns Authenticator provisioning URI. */
 export function createTotpProvisioningUri(
   input: { secret: string; issuer: string; account: string } & TotpOptions,
 ): string {
@@ -117,6 +129,7 @@ export function createTotpProvisioningUri(
   return url.toString();
 }
 
+/** Verify a TOTP code with a bounded clock-drift window. @param input Verification input and settings. @returns Whether the code is valid and its matched counter when valid. */
 export async function verifyTotpCode(
   input: VerifyTotpOptions,
 ): Promise<{ valid: boolean; counter?: number; drift?: number }> {

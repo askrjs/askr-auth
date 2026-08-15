@@ -1,9 +1,13 @@
 import { decodeCbor } from "./cbor";
 import { MfaValidationError } from "./mfa-error";
 
+/** COSE algorithm identifiers supported for WebAuthn public keys. */
 export type CoseAlgorithm = -7 | -257 | -8;
+/** Public-key algorithm and Web Crypto representation decoded from COSE. */
 export interface DecodedCosePublicKey {
+  /** COSE algorithm identifier. */
   algorithm: CoseAlgorithm;
+  /** Equivalent Web Crypto JWK. */
   publicKeyJwk: JsonWebKey;
 }
 
@@ -18,6 +22,7 @@ const b64 = (value: Uint8Array) =>
     .replaceAll("/", "_")
     .replace(/=+$/u, "");
 
+/** Decode a COSE public key into an algorithm and Web Crypto JWK. @param input Encoded COSE key. @returns Decoded public-key information. */
 export function decodeCosePublicKey(input: Uint8Array): DecodedCosePublicKey {
   const value = decodeCbor(input);
   if (!(value instanceof Map))

@@ -1,38 +1,17 @@
 import { decodeCbor, decodeCborFirst } from "./cbor";
-import { decodeCosePublicKey, type CoseAlgorithm } from "./cose";
+import { decodeCosePublicKey } from "./cose";
 import { MfaValidationError, type MfaValidationErrorCode } from "./mfa-error";
+import type {
+  WebAuthnAuthenticationInput,
+  WebAuthnRegistrationInput,
+  WebAuthnRegistrationResult,
+} from "./webauthn-types";
 
-export interface WebAuthnRegistrationInput {
-  credentialId: Uint8Array;
-  clientDataJSON: Uint8Array;
-  attestationObject: Uint8Array;
-  expectedChallenge: Uint8Array;
-  allowedOrigins: readonly string[];
-  rpId: string;
-  requireUserVerification?: boolean;
-}
-export interface WebAuthnAuthenticationInput {
-  credentialId: Uint8Array;
-  storedCredentialId: Uint8Array;
-  publicKeyJwk: JsonWebKey;
-  authenticatorData: Uint8Array;
-  clientDataJSON: Uint8Array;
-  signature: Uint8Array;
-  expectedChallenge: Uint8Array;
-  allowedOrigins: readonly string[];
-  rpId: string;
-  signCount: number;
-  requireUserVerification?: boolean;
-}
-export interface WebAuthnRegistrationResult {
-  credentialId: Uint8Array;
-  publicKeyJwk: JsonWebKey;
-  algorithm: CoseAlgorithm;
-  signCount: number;
-  aaguid: Uint8Array;
-  backupEligible: boolean;
-  backedUp: boolean;
-}
+export type {
+  WebAuthnAuthenticationInput,
+  WebAuthnRegistrationInput,
+  WebAuthnRegistrationResult,
+} from "./webauthn-types";
 
 const fail = (code: MfaValidationErrorCode, message: string): never => {
   throw new MfaValidationError(code, message);
@@ -214,6 +193,7 @@ function derEcdsa(signature: Uint8Array): Uint8Array {
   return output;
 }
 
+/** Verify a WebAuthn registration ceremony and decode its public key. @param input Registration ceremony data. @returns Persistable credential information. */
 export async function verifyWebAuthnRegistration(
   input: WebAuthnRegistrationInput,
 ): Promise<WebAuthnRegistrationResult> {
@@ -271,6 +251,7 @@ export async function verifyWebAuthnRegistration(
   };
 }
 
+/** Verify a WebAuthn assertion against a stored credential. @param input Authentication ceremony data. @returns Whether the assertion is valid. */
 export async function verifyWebAuthnAuthentication(
   input: WebAuthnAuthenticationInput,
 ): Promise<{ signCount: number; backupEligible: boolean; backedUp: boolean }> {
