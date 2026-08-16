@@ -74,6 +74,37 @@ describe("OIDC client", () => {
     await expect(client.discover()).resolves.toEqual(oidcMetadata);
   });
 
+  it("should share concurrent discovery and retry after a failed discovery", async () => {
+    let calls = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const client = createOidcClient({
+      issuer: oidcMetadata.issuer,
+      clientId: "askr-client",
+      redirectUri: "https://app.example.test/callback",
+      fetch: async () => {
+        calls += 1;
+        if (calls === 1) {
+          await gate;
+          throw new Error("temporary discovery failure");
+        }
+        return new Response(JSON.stringify(oidcMetadata));
+      },
+    });
+
+    const first = client.discover();
+    const second = client.discover();
+    expect(calls).toBe(1);
+    release();
+    await expect(Promise.all([first, second])).rejects.toMatchObject({
+      code: "discovery-failed",
+    });
+    await expect(client.discover()).resolves.toEqual(oidcMetadata);
+    expect(calls).toBe(2);
+  });
+
   it("should create an authorization-code PKCE request with state and nonce", async () => {
     const client = createOidcClient({
       issuer: "https://login.example.test",
