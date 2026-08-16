@@ -20,9 +20,18 @@ export function createOidcClient(options: OidcClientOptions): OidcClient {
   const issuer = options.issuer;
   const request = options.fetch ?? globalThis.fetch.bind(globalThis);
   let metadata: OidcProviderMetadata | undefined;
+  let metadataPromise: Promise<OidcProviderMetadata> | undefined;
   let jwksCache: JsonWebKeySet | undefined;
   return {
-    discover: async () => (metadata ??= await discoverOidcProvider(request, issuer)),
+    discover: async () => {
+      if (metadata) return metadata;
+      metadataPromise ??= discoverOidcProvider(request, issuer)
+        .then((discovered) => (metadata = discovered))
+        .finally(() => {
+          metadataPromise = undefined;
+        });
+      return metadataPromise;
+    },
     async createAuthorizationRequest(
       input: OidcAuthorizationRequestOptions = {},
     ): Promise<OidcAuthorizationRequest> {
