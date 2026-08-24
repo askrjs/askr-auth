@@ -500,6 +500,27 @@ describe("JWT resource server", () => {
     });
   });
 
+  it("should propagate operational failures from bearer and cookie JWT validators", async () => {
+    const failure = new Error("validator unavailable");
+    const validator = { validate: async () => Promise.reject(failure) };
+    const auth = createAuth({ jwt: validator, jwtCookie: { name: "auth", validator } });
+
+    await expect(
+      auth.resolve(
+        new Request("https://api.example.test/users", {
+          headers: { authorization: "Bearer token" },
+        }),
+      ),
+    ).rejects.toBe(failure);
+    await expect(
+      auth.resolve(
+        new Request("https://api.example.test/users", {
+          headers: { cookie: "auth=token" },
+        }),
+      ),
+    ).rejects.toBe(failure);
+  });
+
   it("should enrich a bearer principal through the configured principal store", async () => {
     const validator = createJwtValidator({ issuer: validPayload.iss, jwks, clock: () => now });
     const auth = createAuth({
