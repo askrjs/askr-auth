@@ -23,6 +23,20 @@ export interface VerifyTotpOptions extends TotpOptions {
   window?: number;
 }
 
+/** Result of verifying a TOTP code. */
+export type TotpVerificationResult =
+  | {
+      valid: true;
+      /**
+       * Accepted moving counter. The application must atomically reject an already-consumed
+       * counter and persist a newly accepted counter to provide replay protection.
+       */
+      counter: number;
+      /** Matched offset from the current counter; useful for application-owned clock-drift policy. */
+      drift: number;
+    }
+  | { valid: false; counter?: never; drift?: never };
+
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 function decodeSecret(secret: string): Uint8Array {
   const normalized = secret.toUpperCase().replace(/=+$/u, "");
@@ -129,10 +143,24 @@ export function createTotpProvisioningUri(
   return url.toString();
 }
 
-/** Verify a TOTP code with a bounded clock-drift window. @param input Verification input and settings. @returns Whether the code is valid and its matched counter when valid. */
-export async function verifyTotpCode(
-  input: VerifyTotpOptions,
-): Promise<{ valid: boolean; counter?: number; drift?: number }> {
+/**
+ * Verify a TOTP code with a bounded clock-drift window.
+ *
+ * The window is scanned from `-window` through `+window`. If the same code matches more than one
+ * counter, the last match wins, so the greatest numeric drift (toward `+window`) is returned.
+ *
+ * A valid cryptographic result alone does not prevent replay. The caller must atomically consume
+ * and persist the returned `counter` before granting access:
+ *
+ * ```ts
+ * const result = await verifyTotpCode({ secret, code });
+ * if (result.valid && await counters.consume(result.counter)) grantAccess();
+ * ```
+ *
+ * @param input Verification input and settings.
+ * @returns The validation result and matched counter/drift when valid.
+ */
+export async function verifyTotpCode(input: VerifyTotpOptions): Promise<TotpVerificationResult> {
   const secret = decodeSecret(input.secret);
   const { algorithm, digits, period } = parameters(input);
   if (!new RegExp(`^\\d{${digits}}$`, "u").test(input.code))
