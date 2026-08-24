@@ -48,6 +48,12 @@ export interface AuthResolver<
   P extends Principal = Principal,
   S extends AuthSession = AuthSession,
 > {
-  /** Resolve the principal, session, tenant, and authorization state. @param request Incoming request. @param options Optional cancellation signal. @returns Resolved authentication context. */
+  /**
+   * Resolve the principal, session, tenant, and authorization state.
+   * Invalid bearer and cookie JWTs fall through as unauthenticated; tenant and store failures propagate.
+   * @param request Incoming request.
+   * @param options Optional cancellation signal.
+   * @returns Resolved authentication context.
+   */
   resolve(request: Request, options?: { signal?: AbortSignal }): Promise<AuthContext<P, S>>;
 }
