@@ -264,7 +264,7 @@ export async function verifyWebAuthnAuthentication(
     input.requireUserVerification ?? true,
     false,
   );
-  if (input.signCount && auth.signCount && auth.signCount <= input.signCount)
+  if (input.signCount > 0 && auth.signCount <= input.signCount)
     fail("counter-rollback", "Authenticator counter did not increase.");
   const signed = new Uint8Array(input.authenticatorData.length + 32);
   signed.set(input.authenticatorData);
