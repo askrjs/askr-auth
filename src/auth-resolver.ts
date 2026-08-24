@@ -1,5 +1,6 @@
 import { readCookie } from "./auth-cookie";
 import type { AuthOptions, AuthResolver } from "./auth-types";
+import type { JwtValidator } from "./jwt-types";
 import type { AuthContext, AuthSession, Principal } from "./model";
 import { JwtValidationError } from "./jwt-error";
 
@@ -11,6 +12,17 @@ const anonymous = <P extends Principal, S extends AuthSession>(): AuthContext<P,
 });
 const usable = (session: AuthSession, now: number) =>
   session.revokedAt === undefined && (session.expiresAt === undefined || session.expiresAt > now);
+async function validatedJwt<P extends Principal>(
+  validator: JwtValidator<P>,
+  token: string,
+): Promise<P | null> {
+  try {
+    return await validator.validate(token);
+  } catch (error) {
+    if (error instanceof JwtValidationError) return null;
+    throw error;
+  }
+}
 
 /** Create a request authentication resolver for bearer tokens, cookies, and sessions. @param options Authentication dependencies and policy. @returns Configured request resolver. */
 export function createAuth<P extends Principal = Principal, S extends AuthSession = AuthSession>(
@@ -31,38 +43,38 @@ export function createAuth<P extends Principal = Principal, S extends AuthSessio
       if (options.jwt && /^Bearer\s/iu.test(authorization ?? "")) {
         const token = authorization!.replace(/^Bearer\s+/iu, "").trim();
         if (!token) return context;
-        const validated = await options.jwt.validate(token);
-        const principal = options.principals
-          ? await options.principals.get(validated.subject ?? validated.id, { request, signal })
-          : validated;
-        if (!principal) return context;
-        const claim = principal.scope;
-        const scopes =
-          typeof claim === "string"
-            ? claim.split(/\s+/).filter(Boolean)
-            : Array.isArray(claim)
-              ? claim.filter((value): value is string => typeof value === "string")
-              : undefined;
-        return {
-          authenticated: true,
-          principal,
-          session: null,
-          tenant: context.tenant,
-          ...(scopes ? { scopes } : {}),
-        };
+        const validated = await validatedJwt(options.jwt, token);
+        if (validated) {
+          const principal = options.principals
+            ? await options.principals.get(validated.subject ?? validated.id, { request, signal })
+            : validated;
+          if (!principal) return context;
+          const claim = principal.scope;
+          const scopes =
+            typeof claim === "string"
+              ? claim.split(/\s+/).filter(Boolean)
+              : Array.isArray(claim)
+                ? claim.filter((value): value is string => typeof value === "string")
+                : undefined;
+          return {
+            authenticated: true,
+            principal,
+            session: null,
+            tenant: context.tenant,
+            ...(scopes ? { scopes } : {}),
+          };
+        }
       }
       const jwtCookie =
         options.jwtCookie && readCookie(request.headers.get("cookie"), options.jwtCookie.name);
       if (options.jwtCookie && jwtCookie) {
-        try {
-          const validated = await options.jwtCookie.validator.validate(jwtCookie);
+        const validated = await validatedJwt(options.jwtCookie.validator, jwtCookie);
+        if (validated) {
           const principal = options.principals
             ? await options.principals.get(validated.subject ?? validated.id, { request, signal })
             : validated;
           if (!principal) return context;
           return { authenticated: true, principal, session: null, tenant: context.tenant };
-        } catch (error) {
-          if (!(error instanceof JwtValidationError)) throw error;
         }
       }
       if (!options.sessions) return context;

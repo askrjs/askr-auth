@@ -477,6 +477,29 @@ describe("JWT resource server", () => {
     });
   });
 
+  it("should resolve invalid bearer and cookie JWTs consistently as anonymous", async () => {
+    const validator = createJwtValidator({ issuer: validPayload.iss, jwks, clock: () => now });
+    const auth = createAuth({ jwt: validator, jwtCookie: { name: "auth", validator } });
+    const bearer = new Request("https://api.example.test/users", {
+      headers: { authorization: "Bearer not-a-jwt" },
+    });
+    const cookie = new Request("https://api.example.test/users", {
+      headers: { cookie: "auth=not-a-jwt" },
+    });
+
+    const [bearerResult, cookieResult] = await Promise.all([
+      auth.resolve(bearer),
+      auth.resolve(cookie),
+    ]);
+
+    expect(bearerResult).toEqual(cookieResult);
+    expect(bearerResult).toMatchObject({
+      authenticated: false,
+      principal: null,
+      session: null,
+    });
+  });
+
   it("should enrich a bearer principal through the configured principal store", async () => {
     const validator = createJwtValidator({ issuer: validPayload.iss, jwks, clock: () => now });
     const auth = createAuth({
