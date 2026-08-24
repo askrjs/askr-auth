@@ -5,6 +5,22 @@ export async function discoverOidcProvider(
   request: typeof fetch,
   issuer: string,
 ): Promise<OidcProviderMetadata> {
+  try {
+    const url = new URL(issuer);
+    if (
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    )
+      throw new Error();
+  } catch {
+    throw new OidcClientError(
+      "invalid-metadata",
+      "OIDC issuer must be an absolute HTTPS URL without credentials, query, or fragment.",
+    );
+  }
   let response: Response;
   try {
     response = await request(`${issuer.replace(/\/$/u, "")}/.well-known/openid-configuration`);

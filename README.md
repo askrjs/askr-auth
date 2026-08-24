@@ -54,7 +54,9 @@ TOTP defaults to SHA-1, six digits, 30-second periods, and a one-step window. SH
 and eight-digit codes are supported. WebAuthn uses exact base64url challenges, exact origin
 allowlists, one RP ID, and user verification by default. It accepts ES256, RS256 (RSA 2048-bit or
 larger), and EdDSA/Ed25519 keys. Registration accepts `none` and cryptographically verified packed
-self-attestation only; certificate-backed attestation is deliberately rejected.
+self-attestation only; certificate-backed attestation is deliberately rejected. Verification also
+applies explicit byte limits to client data, credential IDs, challenges, attestation objects,
+authenticator data, and signatures before parsing or cryptographic work.
 
 ## SAML
 
