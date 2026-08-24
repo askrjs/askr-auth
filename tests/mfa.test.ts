@@ -3,6 +3,7 @@ import {
   createTotpProvisioningUri,
   decodeCbor,
   decodeCborFirst,
+  decodeCosePublicKey,
   generateTotpSecret,
   verifyTotpCode,
   verifyWebAuthnAuthentication,
@@ -123,7 +124,76 @@ describe("CBOR", () => {
   });
 });
 
+describe("COSE", () => {
+  it("should directly decode an ES256 public key", () => {
+    const coordinate = new Uint8Array(32).fill(1);
+    expect(
+      decodeCosePublicKey(
+        cbor(
+          new Map([
+            [1, 2],
+            [3, -7],
+            [-1, 1],
+            [-2, coordinate],
+            [-3, coordinate],
+          ]),
+        ),
+      ),
+    ).toMatchObject({ algorithm: -7, publicKeyJwk: { kty: "EC", crv: "P-256" } });
+  });
+
+  it("should reject an unsupported COSE algorithm", () => {
+    expect(() => decodeCosePublicKey(cbor(new Map([[3, -999]])))).toThrow(
+      expect.objectContaining({ code: "unsupported-algorithm" }),
+    );
+  });
+});
+
 describe("WebAuthn", () => {
+  it.each([
+    ["client data", "clientDataJSON", 8_193],
+    ["attestation object", "attestationObject", 65_537],
+    ["credential ID", "credentialId", 1_024],
+    ["challenge", "expectedChallenge", 1_025],
+  ] as const)("should reject an oversized registration %s before parsing", async (_label, field, size) => {
+    await expect(
+      verifyWebAuthnRegistration({
+        credentialId: Uint8Array.of(1),
+        clientDataJSON: Uint8Array.of(),
+        attestationObject: Uint8Array.of(),
+        expectedChallenge: Uint8Array.of(1),
+        allowedOrigins: ["https://example.test"],
+        rpId: "example.test",
+        [field]: new Uint8Array(size),
+      }),
+    ).rejects.toMatchObject({ code: "malformed-input" });
+  });
+
+  it.each([
+    ["client data", "clientDataJSON", 8_193],
+    ["authenticator data", "authenticatorData", 65_537],
+    ["signature", "signature", 513],
+    ["credential ID", "credentialId", 1_024],
+    ["stored credential ID", "storedCredentialId", 1_024],
+    ["challenge", "expectedChallenge", 1_025],
+  ] as const)("should reject oversized authentication %s before verification", async (_label, field, size) => {
+    await expect(
+      verifyWebAuthnAuthentication({
+        credentialId: Uint8Array.of(1),
+        storedCredentialId: Uint8Array.of(1),
+        publicKeyJwk: {},
+        authenticatorData: Uint8Array.of(),
+        clientDataJSON: Uint8Array.of(),
+        signature: Uint8Array.of(),
+        expectedChallenge: Uint8Array.of(1),
+        allowedOrigins: ["https://example.test"],
+        rpId: "example.test",
+        signCount: 0,
+        [field]: new Uint8Array(size),
+      }),
+    ).rejects.toMatchObject({ code: "malformed-input" });
+  });
+
   it("should give a stored ES256 credential when none attestation is valid", async () => {
     const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
       "sign",

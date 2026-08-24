@@ -1,6 +1,7 @@
 import { decodeCbor, decodeCborFirst } from "./cbor";
 import { decodeCosePublicKey } from "./cose";
 import { MfaValidationError, type MfaValidationErrorCode } from "./mfa-error";
+import { assertAuthenticationLimits, assertRegistrationLimits } from "./webauthn-limits";
 import type {
   WebAuthnAuthenticationInput,
   WebAuthnRegistrationInput,
@@ -197,6 +198,7 @@ function derEcdsa(signature: Uint8Array): Uint8Array {
 export async function verifyWebAuthnRegistration(
   input: WebAuthnRegistrationInput,
 ): Promise<WebAuthnRegistrationResult> {
+  assertRegistrationLimits(input);
   clientData(
     input.clientDataJSON,
     "webauthn.create",
@@ -255,6 +257,7 @@ export async function verifyWebAuthnRegistration(
 export async function verifyWebAuthnAuthentication(
   input: WebAuthnAuthenticationInput,
 ): Promise<{ signCount: number; backupEligible: boolean; backedUp: boolean }> {
+  assertAuthenticationLimits(input);
   if (!equal(input.credentialId, input.storedCredentialId))
     fail("credential-mismatch", "Credential ID does not match stored credential.");
   clientData(input.clientDataJSON, "webauthn.get", input.expectedChallenge, input.allowedOrigins);
