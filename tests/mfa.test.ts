@@ -220,4 +220,44 @@ describe("WebAuthn", () => {
       }),
     ).resolves.toEqual({ signCount: 2, backupEligible: false, backedUp: false });
   });
+
+  it("should reject an assertion when a previously nonzero counter resets to zero", async () => {
+    const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+      "sign",
+      "verify",
+    ]);
+    const publicKeyJwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+    publicKeyJwk.alg = "ES256";
+    const rpId = "example.test";
+    const credentialId = Uint8Array.of(1, 2, 3);
+    const challenge = Uint8Array.of(4, 5, 6);
+    const authenticatorData = new Uint8Array(37);
+    authenticatorData.set(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes(rpId))));
+    authenticatorData[32] = 0x05;
+    const clientDataJSON = bytes(
+      JSON.stringify({ type: "webauthn.get", challenge: "BAUG", origin: "https://example.test" }),
+    );
+    const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", clientDataJSON));
+    const signed = new Uint8Array(69);
+    signed.set(authenticatorData);
+    signed.set(hash, 37);
+    const signature = new Uint8Array(
+      await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, pair.privateKey, signed),
+    );
+
+    await expect(
+      verifyWebAuthnAuthentication({
+        credentialId,
+        storedCredentialId: credentialId,
+        publicKeyJwk,
+        authenticatorData,
+        clientDataJSON,
+        signature,
+        expectedChallenge: challenge,
+        allowedOrigins: ["https://example.test"],
+        rpId,
+        signCount: 5,
+      }),
+    ).rejects.toMatchObject({ code: "counter-rollback" });
+  });
 });
