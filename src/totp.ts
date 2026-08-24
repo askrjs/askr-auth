@@ -147,7 +147,7 @@ export function createTotpProvisioningUri(
  * Verify a TOTP code with a bounded clock-drift window.
  *
  * The window is scanned from `-window` through `+window`. If the same code matches more than one
- * counter, the last match wins, so the greatest drift is returned.
+ * counter, the last match wins, so the greatest numeric drift (toward `+window`) is returned.
  *
  * A valid cryptographic result alone does not prevent replay. The caller must atomically consume
  * and persist the returned `counter` before granting access:
