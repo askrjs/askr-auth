@@ -31,6 +31,27 @@ const oidcFetch = async (input: RequestInfo | URL) => {
 };
 
 describe("OIDC client", () => {
+  it.each([
+    "http://login.example.test",
+    "https://user:password@login.example.test",
+    "https://login.example.test?tenant=one",
+    "https://login.example.test#fragment",
+  ])("should reject unsafe issuer %s before discovery network access", async (issuer) => {
+    let calls = 0;
+    const client = createOidcClient({
+      issuer,
+      clientId: "askr-client",
+      redirectUri: "https://app.example.test/callback",
+      fetch: async () => {
+        calls++;
+        throw new Error("unexpected");
+      },
+    });
+
+    await expect(client.discover()).rejects.toMatchObject({ code: "invalid-metadata" });
+    expect(calls).toBe(0);
+  });
+
   it("should give state-mismatch without network access when callback state differs", async () => {
     let calls = 0;
     const client = createOidcClient({
