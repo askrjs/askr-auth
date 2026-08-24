@@ -19,6 +19,13 @@ Replay prevention stays with the application’s durable storage boundary. SAML 
 `requestStore.consume()`. TOTP returns the accepted counter so it can be atomically marked used.
 WebAuthn returns the verified new signature counter so it can be atomically persisted.
 
+## Request authentication
+
+`createAuth()` resolves Bearer JWTs, JWT cookies, and opaque session cookies into one auth context.
+Invalid, expired, or malformed JWTs are treated consistently as unauthenticated and resolution
+continues to the next configured credential source. Operational failures from tenant, principal,
+or session stores still reject `resolve()` so callers can handle unavailable dependencies.
+
 ## OIDC
 
 `exchangeCode()` accepts the callback and the stored authorization request separately. It checks
