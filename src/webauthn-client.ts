@@ -163,5 +163,5 @@ export async function getPasskeyAssertion(
     signature: encodeBase64Url(arrayBuffer(response.signature, "signature")),
   });
 }
-  /** Optional allow-list of credential identifiers. */
-  /** Required user-verification policy. */
+/** Optional allow-list of credential identifiers. */
+/** Required user-verification policy. */
