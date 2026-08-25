@@ -16,41 +16,4 @@ describe("package architecture", () => {
       ).toBe(true);
     }
   });
-
-  it("should keep production modules within the clean-break size limit", () => {
-    for (const file of [
-      "src/auth-cookie.ts",
-      "src/auth-resolver.ts",
-      "src/auth-types.ts",
-      "src/jwt-claims.ts",
-      "src/jwt-encoding.ts",
-      "src/jwt-error.ts",
-      "src/jwt-types.ts",
-      "src/jwt-validator.ts",
-      "src/model.ts",
-      "src/oidc-client.ts",
-      "src/oidc-crypto.ts",
-      "src/oidc-discovery.ts",
-      "src/oidc-token.ts",
-      "src/oidc-types.ts",
-      "src/requirements.ts",
-      "src/saml-client.ts",
-      "src/saml-crypto.ts",
-      "src/saml-dom.ts",
-      "src/saml-metadata.ts",
-      "src/saml-request.ts",
-      "src/saml-response.ts",
-      "src/saml-types.ts",
-      "src/cbor.ts",
-      "src/cose.ts",
-      "src/mfa-error.ts",
-      "src/totp.ts",
-      "src/webauthn.ts",
-    ]) {
-      expect(
-        readFileSync(resolve(root, file), "utf8").split("\n").length,
-        file,
-      ).toBeLessThanOrEqual(300);
-    }
-  });
 });

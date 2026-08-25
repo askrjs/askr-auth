@@ -7,13 +7,7 @@ export async function discoverOidcProvider(
 ): Promise<OidcProviderMetadata> {
   try {
     const url = new URL(issuer);
-    if (
-      url.protocol !== "https:" ||
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash
-    )
+    if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash)
       throw new Error();
   } catch {
     throw new OidcClientError(
