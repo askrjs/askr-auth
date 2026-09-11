@@ -3,7 +3,7 @@
 [![CI](https://github.com/askrjs/askr-auth/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/askrjs/askr-auth/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/%40askrjs%2Fauth.svg)](https://www.npmjs.com/package/@askrjs/auth)
 
-Framework-owned, domain-neutral authentication primitives for Askr. Requires Node.js 22 or newer.
+Framework-owned, domain-neutral authentication primitives for Askr. Requires Node.js 24 or newer.
 
 ## Feature matrix
 
