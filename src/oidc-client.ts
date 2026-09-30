@@ -21,7 +21,6 @@ export function createOidcClient(options: OidcClientOptions): OidcClient {
   const request = options.fetch ?? globalThis.fetch.bind(globalThis);
   let metadata: OidcProviderMetadata | undefined;
   let metadataPromise: Promise<OidcProviderMetadata> | undefined;
-  let jwksCache: JsonWebKeySet | undefined;
   return {
     discover: async () => {
       if (metadata) return metadata;
@@ -59,16 +58,15 @@ export function createOidcClient(options: OidcClientOptions): OidcClient {
         );
       const discovered = await this.discover();
       const tokens = await exchangeOidcCode(request, discovered, options, input);
-      let jwksCalls = 0;
+      // Do not reuse a process-wide JWKS snapshot: the validator's refresh cooldown
+      // treats the initial provider result as fresh and can then block key-rotation refresh.
       const jwks = async () => {
-        jwksCalls++;
-        if (jwksCalls === 1 && jwksCache) return jwksCache;
         const response = await request(discovered.jwks_uri);
         if (!response.ok) throw new Error(`JWKS request failed with HTTP ${response.status}.`);
         const value: unknown = await response.json();
         if (!value || typeof value !== "object" || !Array.isArray((value as JsonWebKeySet).keys))
           throw new Error("JWKS response is invalid.");
-        return (jwksCache = value as JsonWebKeySet);
+        return value as JsonWebKeySet;
       };
       try {
         const principal = await validateOidcIdToken(tokens.id_token!, {
