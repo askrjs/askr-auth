@@ -117,7 +117,7 @@ export function createJwtValidator(options: JwtValidatorOptions): JwtValidator {
           return await globalThis.crypto.subtle.verify(
             operation.operation,
             imported,
-            Uint8Array.from(decodeBase64Url(parts[2]), (char) => char.charCodeAt(0)),
+            Uint8Array.from(decodeBase64Url(parts[2])),
             new TextEncoder().encode(`${parts[0]}.${parts[1]}`),
           );
         } catch {

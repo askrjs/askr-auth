@@ -328,6 +328,21 @@ describe("JWT resource server", () => {
     });
   });
 
+  it("should preserve non-ASCII JWT claim values", async () => {
+    const validator = createJwtValidator({
+      issuer: validPayload.iss,
+      audience: validPayload.aud,
+      jwks,
+      clock: () => now,
+    });
+    const name = "Ångström 日本 🙂";
+
+    await expect(validator.validate(token({ ...validPayload, name }))).resolves.toHaveProperty(
+      "name",
+      name,
+    );
+  });
+
   it("should reject a token with an invalid signature", async () => {
     const validator = createJwtValidator({ issuer: validPayload.iss, jwks, clock: () => now });
     const signed = token(validPayload).split(".");
