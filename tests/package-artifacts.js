@@ -1,19 +1,16 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
+import { readPackRecord } from "./pack-result.js";
 
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-const result = JSON.parse(
+const packRecord = readPackRecord(JSON.parse(
   execFileSync(npm, ["pack", "--ignore-scripts", "--dry-run", "--json"], {
     encoding: "utf8",
   }),
-);
+));
 
-if (result.length !== 1) {
-  throw new Error(`Expected one packed artifact, received ${result.length}.`);
-}
-
-const packedFiles = new Set(result[0].files.map(({ path }) => normalize(path)));
+const packedFiles = new Set(packRecord.files.map(({ path }) => normalize(path)));
 for (const required of [
   "dist/index.js",
   "dist/index.d.ts",
@@ -33,7 +30,7 @@ for (const required of [
 }
 const sourceMappingPattern = /[#@]\s*sourceMappingURL=([^\s*]+)/gu;
 
-for (const file of result[0].files) {
+for (const file of packRecord.files) {
   if (!/\.(?:css|d\.ts|js)$/u.test(file.path)) continue;
 
   const source = readFileSync(file.path, "utf8");
