@@ -17,12 +17,32 @@ import {
 
 function decode(value: string): string {
   if (value.length > 1_398_104) malformed("SAML response exceeds 1 MiB");
-  if (!/^[A-Za-z0-9+/]*={0,2}$/u.test(value) || value.length % 4 === 1)
-    malformed("Malformed base64");
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 61) end -= 1;
+  const paddingLength = value.length - end;
+  if (paddingLength > 2 || value.length % 4 === 1) malformed("Malformed base64");
+  for (let index = 0; index < end; index += 1) {
+    const code = value.charCodeAt(index);
+    if (
+      !(
+        (code >= 65 && code <= 90) ||
+        (code >= 97 && code <= 122) ||
+        (code >= 48 && code <= 57) ||
+        code === 43 ||
+        code === 47
+      )
+    ) {
+      malformed("Malformed base64");
+    }
+  }
   const bytes = Buffer.from(value, "base64");
   if (bytes.length > 1024 * 1024) malformed("SAML response exceeds 1 MiB");
-  const normalized = value.replace(/=+$/u, "");
-  if (bytes.toString("base64").replace(/=+$/u, "") !== normalized) malformed("Malformed base64");
+  const canonical = bytes.toString("base64");
+  let canonicalEnd = canonical.length;
+  while (canonicalEnd > 0 && canonical.charCodeAt(canonicalEnd - 1) === 61) {
+    canonicalEnd -= 1;
+  }
+  if (canonical.slice(0, canonicalEnd) !== value.slice(0, end)) malformed("Malformed base64");
   return bytes.toString("utf8");
 }
 

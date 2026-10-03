@@ -38,9 +38,28 @@ export type TotpVerificationResult =
   | { valid: false; counter?: never; drift?: never };
 
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-function decodeSecret(secret: string): Uint8Array {
-  const normalized = secret.toUpperCase().replace(/=+$/u, "");
-  if (!normalized || !/^[A-Z2-7]+$/u.test(normalized))
+function normalizeSecret(secret: string): string {
+  if (/[^A-Za-z2-7=]/u.test(secret))
+    throw new MfaValidationError("malformed-input", "TOTP secret is not valid Base32.");
+  const normalized = secret.toUpperCase();
+  let end = normalized.length;
+  while (end > 0 && normalized.charCodeAt(end - 1) === 61) end -= 1;
+  const paddingLength = normalized.length - end;
+  const lengthRemainder = end % 8;
+  const expectedPadding = lengthRemainder === 0 ? 0 : 8 - lengthRemainder;
+  if (paddingLength > 0 && paddingLength !== expectedPadding)
+    throw new MfaValidationError("malformed-input", "TOTP secret is not valid Base32.");
+  return normalized.slice(0, end);
+}
+
+function decodeSecret(secret: string): { bytes: Uint8Array; normalized: string } {
+  const normalized = normalizeSecret(secret);
+  const lengthRemainder = normalized.length % 8;
+  if (
+    !normalized ||
+    /[^A-Z2-7]/u.test(normalized) ||
+    ![0, 2, 4, 5, 7].includes(lengthRemainder)
+  )
     throw new MfaValidationError("malformed-input", "TOTP secret is not valid Base32.");
   let bits = 0,
     value = 0;
@@ -56,7 +75,7 @@ function decodeSecret(secret: string): Uint8Array {
   }
   if (bits && value !== 0)
     throw new MfaValidationError("malformed-input", "TOTP secret has non-zero padding bits.");
-  return Uint8Array.from(output);
+  return { bytes: Uint8Array.from(output), normalized };
 }
 function encodeSecret(input: Uint8Array): string {
   let bits = 0,
@@ -128,14 +147,14 @@ export function generateTotpSecret(options: { byteLength?: number } = {}): strin
 export function createTotpProvisioningUri(
   input: { secret: string; issuer: string; account: string } & TotpOptions,
 ): string {
-  decodeSecret(input.secret);
+  const { normalized } = decodeSecret(input.secret);
   const { algorithm, digits, period } = parameters(input);
   if (!input.issuer || !input.account)
     throw new MfaValidationError("malformed-input", "TOTP issuer and account are required.");
   const url = new URL(
     `otpauth://totp/${encodeURIComponent(input.issuer)}:${encodeURIComponent(input.account)}`,
   );
-  url.searchParams.set("secret", input.secret.toUpperCase().replace(/=+$/u, ""));
+  url.searchParams.set("secret", normalized);
   url.searchParams.set("issuer", input.issuer);
   url.searchParams.set("algorithm", algorithm.replace("-", ""));
   url.searchParams.set("digits", String(digits));
@@ -161,7 +180,7 @@ export function createTotpProvisioningUri(
  * @returns The validation result and matched counter/drift when valid.
  */
 export async function verifyTotpCode(input: VerifyTotpOptions): Promise<TotpVerificationResult> {
-  const secret = decodeSecret(input.secret);
+  const { bytes: secret } = decodeSecret(input.secret);
   const { algorithm, digits, period } = parameters(input);
   if (!new RegExp(`^\\d{${digits}}$`, "u").test(input.code))
     throw new MfaValidationError("malformed-input", "TOTP code has an invalid shape.");
