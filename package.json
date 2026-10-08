@@ -45,6 +45,10 @@
       "types": "./dist/oidc.d.ts",
       "import": "./dist/oidc.js"
     },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js"
+    },
     "./saml": {
       "types": "./dist/saml.d.ts",
       "import": "./dist/saml.js"

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Optional `@askrjs/auth/browser` session lifecycle with memory-only tokens,
+  one-time redirect transactions, shared expiry renewal, correlated web-message
+  transport, cancellation/disposal guards, and a standalone signed-provider SPA.
+
 ### Fixed
 
 - Validate OIDC ID tokens in browsers without a Node `Buffer` polyfill while

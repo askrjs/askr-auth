@@ -1,0 +1,11 @@
+{
+  "name": "askr-browser-session-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@askrjs/auth": "file:../../askrjs-auth-0.4.1.tgz"
+  }
+}
