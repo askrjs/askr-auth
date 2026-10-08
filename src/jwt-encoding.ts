@@ -5,8 +5,8 @@ export function decodeBase64Url(value: string): Uint8Array {
     if (!/^[A-Za-z0-9_-]*$/u.test(value) || value.length % 4 === 1) throw new Error();
     const normalized = value.replaceAll("-", "+").replaceAll("_", "/");
     const decoded = atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "="));
-    const bytes = Buffer.from(decoded, "binary");
-    const canonical = bytes.toString("base64url");
+    const bytes = Uint8Array.from(decoded, (character) => character.charCodeAt(0));
+    const canonical = btoa(decoded).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
     if (canonical !== value) throw new Error();
     return bytes;
   } catch {

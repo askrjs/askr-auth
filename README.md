@@ -3,17 +3,18 @@
 [![CI](https://github.com/askrjs/askr-auth/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/askrjs/askr-auth/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/%40askrjs%2Fauth.svg)](https://www.npmjs.com/package/@askrjs/auth)
 
-Framework-owned, domain-neutral authentication primitives for Askr. Requires Node.js 24 or newer.
+Framework-owned, domain-neutral authentication primitives for Askr. Server use requires Node.js 24 or newer; browser entrypoints use Web Crypto and Fetch.
 
 ## Feature matrix
 
-| Entry               | Owns                                                                                                | Does not own                                                     |
-| ------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `@askrjs/auth`      | `Principal`, auth contexts and requirements, bearer/cookie/session request resolution               | Users, organizations, credential storage, password hashing       |
-| `@askrjs/auth/jwt`  | RS256/ES256 issuance and validation, claims, JWKS rollover                                          | Token persistence or revocation lists                            |
-| `@askrjs/auth/oidc` | Discovery, authorization-code PKCE, callback correlation, verified ID-token-to-`Principal` exchange | Provider UI, account linking, refresh-token storage              |
-| `@askrjs/auth/saml` | SP metadata and requests, signed/encrypted response validation, request correlation                 | IdP operation, SLO, IdP-initiated SAML, external CA trust policy |
-| `@askrjs/auth/mfa`  | TOTP, bounded CBOR/COSE, WebAuthn registration and authentication verification                      | Credential storage, recovery policy, enrollment UI               |
+| Entry                  | Owns                                                                                                | Does not own                                                     |
+| ---------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `@askrjs/auth`         | `Principal`, auth contexts and requirements, bearer/cookie/session request resolution               | Users, organizations, credential storage, password hashing       |
+| `@askrjs/auth/jwt`     | RS256/ES256 issuance and validation, claims, JWKS rollover                                          | Token persistence or revocation lists                            |
+| `@askrjs/auth/oidc`    | Discovery, authorization-code PKCE, callback correlation, verified ID-token-to-`Principal` exchange | Provider UI, account linking, refresh-token storage              |
+| `@askrjs/auth/browser` | Optional browser session, redirect transactions, memory-only tokens, shared expiry renewal          | Provider logout, application identity/policy, persistent tokens  |
+| `@askrjs/auth/saml`    | SP metadata and requests, signed/encrypted response validation, request correlation                 | IdP operation, SLO, IdP-initiated SAML, external CA trust policy |
+| `@askrjs/auth/mfa`     | TOTP, bounded CBOR/COSE, WebAuthn registration and authentication verification                      | Credential storage, recovery policy, enrollment UI               |
 
 Replay prevention stays with the application’s durable storage boundary. SAML requires atomic
 `requestStore.consume()`. TOTP returns the accepted counter so it can be atomically marked used.
@@ -31,6 +32,14 @@ or session stores still reject `resolve()` so callers can handle unavailable dep
 `exchangeCode()` accepts the callback and the stored authorization request separately. It checks
 state before network access, then validates the required ID token against discovery and JWKS before
 returning `{ tokens, principal }`.
+
+The OIDC entrypoint also runs in browsers with Web Crypto, Fetch, and UTF-8
+encoding support. JWT decoding uses browser-native bytes and needs no Node
+`Buffer` polyfill. Browser clients omit `clientSecret`; retain the authorization
+request for callback correlation. The optional
+[browser session layer](docs/browser-session.md) owns redirect correlation and
+expiry renewal while applications retain navigation, provider logout, and policy.
+See the [standalone SPA example](examples/browser-session/README.md).
 
 ```ts
 import { createOidcClient } from "@askrjs/auth/oidc";

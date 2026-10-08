@@ -281,6 +281,9 @@ describe("SAML service provider", () => {
     await expect(service.validateResponse({ samlResponse: "%%%" })).rejects.toBeInstanceOf(
       SamlValidationError,
     );
+    await expect(
+      service.validateResponse({ samlResponse: `${"=".repeat(50_000)}A` }),
+    ).rejects.toBeInstanceOf(SamlValidationError);
   });
 
   it("should give an invalid-signature error when an assertion is unsigned", async () => {

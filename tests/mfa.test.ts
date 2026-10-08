@@ -87,6 +87,21 @@ describe("TOTP", () => {
     );
   });
 
+  it("should accept lowercase and correctly padded secrets and emit canonical Base32", async () => {
+    const secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ".toLowerCase();
+    await expect(
+      verifyTotpCode({ secret, code: "94287082", digits: 8, at: new Date(59_000), window: 0 }),
+    ).resolves.toEqual({ valid: true, counter: 1, drift: 0 });
+
+    const uri = createTotpProvisioningUri({
+      secret: "mzxq====",
+      issuer: "Acme",
+      account: "user@example.com",
+    });
+    expect(uri).toContain("secret=MZXQ");
+    expect(uri).not.toContain("secret=MZXQ=");
+  });
+
   it("should give at least 128 bits of entropy when a default secret is generated", () => {
     expect(generateTotpSecret()).toHaveLength(32);
   });
@@ -95,6 +110,38 @@ describe("TOTP", () => {
     await expect(verifyTotpCode({ secret: "not-a-secret!", code: "123456" })).rejects.toMatchObject(
       { code: "malformed-input" },
     );
+    await expect(verifyTotpCode({ secret: "AAAAAAA\n", code: "123456" })).rejects.toMatchObject(
+      { code: "malformed-input" },
+    );
+    await expect(verifyTotpCode({ secret: "AAA", code: "123456" })).rejects.toMatchObject({
+      code: "malformed-input",
+    });
+    expect(() =>
+      createTotpProvisioningUri({ secret: "AAAAAAA\n", issuer: "Acme", account: "user@example.com" }),
+    ).toThrow(expect.objectContaining({ code: "malformed-input" }));
+    expect(() =>
+      createTotpProvisioningUri({ secret: "AAA", issuer: "Acme", account: "user@example.com" }),
+    ).toThrow(expect.objectContaining({ code: "malformed-input" }));
+    expect(() =>
+      createTotpProvisioningUri({
+        secret: "GEZDGNBVGY3TQOJQ=",
+        issuer: "Acme",
+        account: "user@example.com",
+      }),
+    ).toThrow(expect.objectContaining({ code: "malformed-input" }));
+    expect(() =>
+      createTotpProvisioningUri({
+        secret: "AAAAAAA\u017f",
+        issuer: "Acme",
+        account: "user@example.com",
+      }),
+    ).toThrow(expect.objectContaining({ code: "malformed-input" }));
+  });
+
+  it("should reject malformed secrets with long internal padding", async () => {
+    await expect(
+      verifyTotpCode({ secret: `${"=".repeat(50_000)}A`, code: "123456" }),
+    ).rejects.toMatchObject({ code: "malformed-input" });
   });
 });
 
