@@ -704,6 +704,26 @@ test("standalone packed SPA exercises signed login, reload restoration, expiry r
     await expect(page.locator("#status")).toHaveText("Signed out.");
     await page.getByRole("button", { name: "Reload", exact: true }).click();
     await expect(page.locator("#status")).toContainText("Interaction required: login_required");
+    const attack = new URL(`${url}/provider/authorize`);
+    const attackState = "</script><script>globalThis.demoInjected=true</script>";
+    const parameters = {
+      redirect_uri: `${url}/callback`,
+      client_id: "demo-spa",
+      response_type: "code",
+      code_challenge_method: "S256",
+      code_challenge: "A".repeat(43),
+      nonce: "demo-nonce",
+      state: attackState,
+      prompt: "none",
+      response_mode: "web_message",
+    };
+    for (const [name, value] of Object.entries(parameters)) attack.searchParams.set(name, value);
+    await page.goto(attack.href);
+    expect(await page.evaluate(() => globalThis.demoInjected)).toBeUndefined();
+    expect(await page.evaluate(() => new URL(location.href).searchParams.get("state"))).toBe(
+      attackState,
+    );
+    expect(await page.locator("script:not([src])").count()).toBe(0);
   } finally {
     const stopped = new Promise((resolve) => server.once("exit", resolve));
     server.kill();

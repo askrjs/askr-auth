@@ -42,6 +42,16 @@ const server = createServer(
         });
       } else if (url.pathname === "/provider/jwks") {
         send(response, 200, { keys: [jwk] });
+      } else if (url.pathname === "/provider/web-message") {
+        response.writeHead(200, { "content-type": "text/html" });
+        response.end('<script src="/provider/web-message.js"></script>');
+      } else if (url.pathname === "/provider/web-message.js") {
+        response.writeHead(200, { "content-type": "text/javascript" });
+        response.end(`const params = new URL(location.href).searchParams;
+        const response = { state: params.get('state') };
+        if (params.has('error')) response.error = params.get('error');
+        else response.code = params.get('code');
+        parent.postMessage(response, location.origin);`);
       } else if (url.pathname === "/provider/authorize") {
         const params = url.searchParams;
         const redirect = new URL(params.get("redirect_uri"));
@@ -86,9 +96,10 @@ const server = createServer(
           result = { state: params.get("state"), code };
         }
         if (params.get("response_mode") === "web_message") {
-          const data = JSON.stringify(result).replaceAll("<", "\\u003c");
-          response.writeHead(200, { "content-type": "text/html" });
-          response.end(`<script>parent.postMessage(${data}, ${JSON.stringify(origin)})</script>`);
+          const delivery = new URL("/provider/web-message", origin);
+          for (const [key, value] of Object.entries(result)) delivery.searchParams.set(key, value);
+          response.writeHead(302, { location: delivery.href });
+          response.end();
         } else {
           for (const [key, value] of Object.entries(result)) redirect.searchParams.set(key, value);
           response.writeHead(302, { location: redirect.href });
