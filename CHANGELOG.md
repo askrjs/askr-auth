@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+
+- Validate OIDC ID tokens in browsers without a Node `Buffer` polyfill while
+  retaining canonical base64url, UTF-8, signature, and nonce validation.
+
 ## 0.4.1 - 2026-09-30
 
 ### Fixed

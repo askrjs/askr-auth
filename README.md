@@ -32,6 +32,12 @@ or session stores still reject `resolve()` so callers can handle unavailable dep
 state before network access, then validates the required ID token against discovery and JWKS before
 returning `{ tokens, principal }`.
 
+The OIDC entrypoint also runs in browsers with Web Crypto, Fetch, and UTF-8
+encoding support. JWT decoding uses browser-native bytes and needs no Node
+`Buffer` polyfill. Browser clients omit `clientSecret`; retain the authorization
+request for callback correlation and keep session storage and renewal in the
+application.
+
 ```ts
 import { createOidcClient } from "@askrjs/auth/oidc";
 
