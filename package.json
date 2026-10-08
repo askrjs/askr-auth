@@ -66,7 +66,9 @@
     "build": "vp pack",
     "lint": "vp lint src tests && npm run typecheck",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vp test run -c vitest.config.ts",
+    "test": "npm run test:unit && npm run test:browser",
+    "test:unit": "vp test run -c vitest.config.ts",
+    "test:browser": "npm run build && playwright test",
     "test:publint": "publint",
     "pack:check": "node tests/package-artifacts.js",
     "check": "npm run lint && npm run typecheck && npm test && npm run build && npm run test:publint && npm run pack:check",
@@ -79,6 +81,7 @@
     "xml-encryption": "6.0.1"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@types/node": "^26.3.0",
     "publint": "^0.3.24",
     "typescript": "^7.0.2",
