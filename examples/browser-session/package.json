@@ -6,6 +6,6 @@
     "start": "node server.mjs"
   },
   "dependencies": {
-    "@askrjs/auth": "file:../../askrjs-auth-0.4.1.tgz"
+    "@askrjs/auth": "file:../../askrjs-auth-0.4.2.tgz"
   }
 }

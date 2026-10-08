@@ -642,6 +642,15 @@ test("exchange validation cannot extend an access token past its lifetime", asyn
 test("standalone packed SPA exercises signed login, reload restoration, expiry renewal and logout", async ({
   page,
 }) => {
+  const installed = JSON.parse(
+    await readFile(join(consumer, "node_modules/@askrjs/auth/package.json"), "utf8"),
+  );
+  const example = JSON.parse(
+    await readFile(new URL("../../examples/browser-session/package.json", import.meta.url), "utf8"),
+  );
+  expect(example.dependencies["@askrjs/auth"]).toBe(
+    `file:../../askrjs-auth-${installed.version}.tgz`,
+  );
   await page.unrouteAll({ behavior: "wait" });
   await writeFile(
     join(consumer, "server.mjs"),

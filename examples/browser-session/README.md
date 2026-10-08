@@ -18,7 +18,7 @@ npm start
 
 Open `https://127.0.0.1:8000` and accept the demo's self-signed localhost certificate.
 The included TLS key/certificate are public demo fixtures. The starter installs the checkout's packed artifact;
-the previously published 0.4.1 package does not include the new browser entrypoint.
+The browser entrypoint is available starting with `@askrjs/auth@0.4.2`.
 
 1. Click Login. The signed callback validates the ID token and consumes the
    redirect transaction. Callback parameters are then removed from the URL.
