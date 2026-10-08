@@ -12,6 +12,8 @@ jobs:
   publish:
     needs: [ci]
     uses: askrjs/actions/.github/workflows/publish-package.yml@main
+    with:
+      install-playwright: true
     permissions:
       contents: write
       id-token: write

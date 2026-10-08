@@ -4,11 +4,13 @@ import { dirname, join, normalize } from "node:path";
 import { readPackRecord } from "./pack-result.js";
 
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-const packRecord = readPackRecord(JSON.parse(
-  execFileSync(npm, ["pack", "--ignore-scripts", "--dry-run", "--json"], {
-    encoding: "utf8",
-  }),
-));
+const packRecord = readPackRecord(
+  JSON.parse(
+    execFileSync(npm, ["pack", "--ignore-scripts", "--dry-run", "--json"], {
+      encoding: "utf8",
+    }),
+  ),
+);
 
 const packedFiles = new Set(packRecord.files.map(({ path }) => normalize(path)));
 for (const required of [
@@ -18,6 +20,8 @@ for (const required of [
   "dist/jwt.d.ts",
   "dist/oidc.js",
   "dist/oidc.d.ts",
+  "dist/browser.js",
+  "dist/browser.d.ts",
   "dist/saml.js",
   "dist/saml.d.ts",
   "dist/mfa.js",

@@ -6,6 +6,7 @@ export default defineConfig({
       index: "src/index.ts",
       jwt: "src/jwt.ts",
       oidc: "src/oidc.ts",
+      browser: "src/browser.ts",
       saml: "src/saml.ts",
       mfa: "src/mfa.ts",
       "webauthn-client": "src/webauthn-client.ts",
