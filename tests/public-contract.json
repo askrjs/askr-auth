@@ -1,0 +1,166 @@
+{
+  "exportKeys": [
+    ".",
+    "./browser",
+    "./jwt",
+    "./mfa",
+    "./oidc",
+    "./package.json",
+    "./saml",
+    "./webauthn-client"
+  ],
+  "entrypoints": [
+    {
+      "specifier": "@askrjs/auth",
+      "values": [
+        "allOf",
+        "anyOf",
+        "createAuth",
+        "requireAnonymous",
+        "requirePermission",
+        "requireRole",
+        "requireScope",
+        "requireUser"
+      ],
+      "types": [
+        "AuthContext",
+        "AuthDecision",
+        "AuthOptions",
+        "AuthRequirement",
+        "AuthResolver",
+        "AuthSession",
+        "Claim",
+        "Principal",
+        "PrincipalStore",
+        "SessionStore",
+        "TenantResolver"
+      ],
+      "removed": []
+    },
+    {
+      "specifier": "@askrjs/auth/jwt",
+      "values": [
+        "JwtValidationError",
+        "createJwtIssuer",
+        "createJwtSigner",
+        "createJwtValidator",
+        "issueTimedJwt"
+      ],
+      "types": [
+        "AskrJsonWebKey",
+        "JsonWebKeySet",
+        "JwksProvider",
+        "JwtIssueInput",
+        "JwtIssuer",
+        "JwtIssuerOptions",
+        "JwtSignInput",
+        "JwtSigner",
+        "JwtSignerOptions",
+        "JwtValidationErrorCode",
+        "JwtValidator",
+        "JwtValidatorOptions",
+        "TimedJwtInput"
+      ],
+      "removed": ["OidcIdTokenOptions", "validateOidcIdToken"]
+    },
+    {
+      "specifier": "@askrjs/auth/oidc",
+      "values": ["OidcClientError", "createOidcClient"],
+      "types": [
+        "OidcAuthorizationRequest",
+        "OidcAuthorizationRequestOptions",
+        "OidcClient",
+        "OidcClientErrorCode",
+        "OidcClientOptions",
+        "OidcCodeExchange",
+        "OidcCodeExchangeResult",
+        "OidcProviderMetadata",
+        "OidcTokenResponse"
+      ],
+      "removed": []
+    },
+    {
+      "specifier": "@askrjs/auth/browser",
+      "values": ["BrowserOidcSessionError", "createBrowserOidcSession"],
+      "types": [
+        "BrowserOidcSession",
+        "BrowserOidcSessionErrorCode",
+        "BrowserOidcSessionOptions",
+        "BrowserOidcSessionResult"
+      ],
+      "removed": []
+    },
+    {
+      "specifier": "@askrjs/auth/saml",
+      "values": ["SamlValidationError", "createSamlServiceProvider"],
+      "types": [
+        "SamlPrincipal",
+        "SamlRequestStore",
+        "SamlServiceProvider",
+        "SamlServiceProviderOptions",
+        "SamlStoredRequest",
+        "SamlValidationErrorCode"
+      ],
+      "removed": []
+    },
+    {
+      "specifier": "@askrjs/auth/mfa",
+      "values": [
+        "MfaValidationError",
+        "createTotpProvisioningUri",
+        "generateTotpSecret",
+        "verifyTotpCode",
+        "verifyWebAuthnAuthentication",
+        "verifyWebAuthnRegistration"
+      ],
+      "types": [
+        "CoseAlgorithm",
+        "MfaValidationErrorCode",
+        "TotpAlgorithm",
+        "TotpOptions",
+        "TotpVerificationResult",
+        "VerifyTotpOptions",
+        "WebAuthnAuthenticationInput",
+        "WebAuthnRegistrationInput",
+        "WebAuthnRegistrationResult"
+      ],
+      "removed": [
+        "CborDecodeOptions",
+        "CborFirstResult",
+        "DecodedCosePublicKey",
+        "decodeCbor",
+        "decodeCborFirst",
+        "decodeCosePublicKey"
+      ]
+    },
+    {
+      "specifier": "@askrjs/auth/webauthn-client",
+      "values": ["createPasskey", "getPasskeyAssertion"],
+      "types": [
+        "CreatePasskeyOptions",
+        "GetPasskeyAssertionOptions",
+        "PasskeyAssertion",
+        "PasskeyRegistration"
+      ],
+      "removed": ["decodeBase64Url", "encodeBase64Url"]
+    }
+  ],
+  "privateSubpaths": [
+    "index",
+    "cbor",
+    "cose",
+    "jwt-validator",
+    "jwt-types",
+    "jwt-clock",
+    "jwt-encoding",
+    "oidc-id-token",
+    "webauthn-client-encoding",
+    "saml-response",
+    "saml-client",
+    "src/index.ts",
+    "dist/index.js",
+    "dist/jwt.js",
+    "dist/mfa.js",
+    "dist/cbor.js"
+  ]
+}

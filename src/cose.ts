@@ -1,8 +1,7 @@
 import { decodeCbor } from "./cbor";
 import { MfaValidationError } from "./mfa-error";
+import type { CoseAlgorithm } from "./webauthn-types";
 
-/** COSE algorithm identifiers supported for WebAuthn public keys. */
-export type CoseAlgorithm = -7 | -257 | -8;
 /** Public-key algorithm and Web Crypto representation decoded from COSE. */
 export interface DecodedCosePublicKey {
   /** COSE algorithm identifier. */

@@ -14,7 +14,7 @@ Framework-owned, domain-neutral authentication primitives for Askr. Server use r
 | `@askrjs/auth/oidc`    | Discovery, authorization-code PKCE, callback correlation, verified ID-token-to-`Principal` exchange | Provider UI, account linking, refresh-token storage              |
 | `@askrjs/auth/browser` | Optional browser session, redirect transactions, memory-only tokens, shared expiry renewal          | Provider logout, application identity/policy, persistent tokens  |
 | `@askrjs/auth/saml`    | SP metadata and requests, signed/encrypted response validation, request correlation                 | IdP operation, SLO, IdP-initiated SAML, external CA trust policy |
-| `@askrjs/auth/mfa`     | TOTP, bounded CBOR/COSE, WebAuthn registration and authentication verification                      | Credential storage, recovery policy, enrollment UI               |
+| `@askrjs/auth/mfa`     | TOTP and WebAuthn registration/authentication verification                                          | Credential storage, recovery policy, enrollment UI               |
 
 Replay prevention stays with the application’s durable storage boundary. SAML requires atomic
 `requestStore.consume()`. TOTP returns the accepted counter so it can be atomically marked used.
@@ -31,7 +31,8 @@ or session stores still reject `resolve()` so callers can handle unavailable dep
 
 `exchangeCode()` accepts the callback and the stored authorization request separately. It checks
 state before network access, then validates the required ID token against discovery and JWKS before
-returning `{ tokens, principal }`.
+returning `{ tokens, principal }`. ID-token audiences must identify only this client; any explicit
+`azp` must match the configured client ID. Additional-audience trust is not part of this client profile.
 
 The OIDC entrypoint also runs in browsers with Web Crypto, Fetch, and UTF-8
 encoding support. JWT decoding uses browser-native bytes and needs no Node
@@ -105,3 +106,7 @@ JWT issuance and validation support RS256 with RSA keys and ES256 with EC P-256 
 ```sh
 npm install @askrjs/auth
 ```
+
+## 0.5.0 preparation
+
+See the [complete API decisions and migration](docs/0.5.0-api.md) and [hardening evidence](docs/0.5.0-hardening.md). The browser passkey helpers remain at `@askrjs/auth/webauthn-client`; CBOR/COSE parsing and base64url conversion are private. Application stores retain replay, credential and policy ownership.

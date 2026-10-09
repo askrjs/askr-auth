@@ -5,6 +5,25 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Breaking changes
+
+- Remove ten JWT/OIDC, CBOR/COSE and browser encoding implementation names from public entrypoints. See [every removal and replacement](docs/0.5.0-api.md). Keep all seven provider/client entrypoints and the public `CoseAlgorithm` credential contract.
+
+### Added
+
+- Installed package contract checks under TypeScript 6 and 7, and Chromium/Firefox/WebKit browser qualification.
+- Real signing-key rotation, clock equality/failure/recovery, signed WebAuthn mismatch and TOTP period/replay-ownership probes.
+
+### Fixed
+
+- Reject non-finite session/JWT clocks and timed issuance whose expiration cannot advance.
+- Reject invalid SAML clocks, time policies and request lifetimes before returning or consuming authentication state.
+- Reject invalid TOTP timestamps and skip drift counters outside the non-negative safe integer range.
+- Bind an explicit OIDC authorized party to the configured client even for a single audience, and reject additional audiences without configured trust.
+- Use real cross-origin frame messages in the browser correlation test and dispatch npm artifact checks through Node on Windows.
+
 ## 0.4.2 - 2026-10-08
 
 ### Breaking changes

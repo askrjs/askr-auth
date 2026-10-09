@@ -416,53 +416,48 @@ test("web-message transport ignores wrong origin, source, state and malformed re
     window.renewal = window.session.getToken();
   });
   await expect(page.locator("iframe")).toHaveCount(1);
-  await page.evaluate(() => {
-    const frame = document.querySelector("iframe");
-    const url = new URL(frame.src);
-    const valid = { state: url.searchParams.get("state"), code: url.searchParams.get("nonce") };
-    window.dispatchEvent(
-      new MessageEvent("message", {
-        origin: "https://attacker.test",
-        source: frame.contentWindow,
-        data: valid,
-      }),
-    );
-    window.dispatchEvent(
-      new MessageEvent("message", {
-        origin: "https://login.example.test",
-        source: window,
-        data: valid,
-      }),
-    );
-    window.dispatchEvent(
-      new MessageEvent("message", {
-        origin: "https://login.example.test",
-        source: frame.contentWindow,
-        data: { ...valid, state: "wrong" },
-      }),
-    );
-    window.dispatchEvent(
-      new MessageEvent("message", {
-        origin: "https://login.example.test",
-        source: frame.contentWindow,
-        data: { ...valid, error: "login_required" },
-      }),
-    );
+  await page.frameLocator("iframe").locator("body").waitFor({ state: "attached" });
+  const providerFrame = page
+    .frames()
+    .find((frame) => frame.url().startsWith(`${issuer}/authorize`));
+  if (!providerFrame) throw new Error("Missing provider frame.");
+  const valid = await page.evaluate(() => {
+    const url = new URL(document.querySelector("iframe").src);
+    window.receivedMessages = 0;
+    window.addEventListener("message", () => {
+      window.receivedMessages++;
+    });
+    return { state: url.searchParams.get("state"), code: url.searchParams.get("nonce") };
   });
+  // Real cross-origin messages avoid Firefox rejecting synthetic MessageEvent sources.
+  await page.route("https://attacker.test/message", (route) =>
+    route.fulfill({ contentType: "text/html", body: "<p>attacker</p>" }),
+  );
+  await page.evaluate(() => {
+    const frame = document.createElement("iframe");
+    frame.id = "attacker";
+    frame.src = "https://attacker.test/message";
+    document.body.append(frame);
+  });
+  await page
+    .frameLocator("#attacker")
+    .locator("body")
+    .evaluate((_body, data) => parent.postMessage(data, "*"), valid);
+  await page.evaluate((data) => {
+    window.dispatchEvent(
+      new MessageEvent("message", { origin: "https://login.example.test", source: window, data }),
+    );
+  }, valid);
+  await providerFrame.evaluate((data) => {
+    parent.postMessage({ ...data, state: "wrong" }, "*");
+    parent.postMessage({ ...data, error: "login_required" }, "*");
+  }, valid);
+  await page.waitForFunction(() => window.receivedMessages === 4);
+  await page.locator("#attacker").evaluate((frame) => frame.remove());
   expect(tokenExchanges).toBe(0);
   await expect(page.locator("iframe")).toHaveCount(1);
-  const result = await page.evaluate(async () => {
-    const frame = document.querySelector("iframe");
-    const url = new URL(frame.src);
-    window.dispatchEvent(
-      new MessageEvent("message", {
-        origin: "https://login.example.test",
-        source: frame.contentWindow,
-        data: { state: url.searchParams.get("state"), code: url.searchParams.get("nonce") },
-      }),
-    );
-    return window.renewal;
-  });
+  await providerFrame.evaluate((data) => parent.postMessage(data, "*"), valid);
+  const result = await page.evaluate(() => window.renewal);
   expect(result.status).toBe("authenticated");
   expect(tokenExchanges).toBe(1);
   await expect(page.locator("iframe")).toHaveCount(0);

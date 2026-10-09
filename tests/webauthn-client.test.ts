@@ -1,10 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  createPasskey,
-  decodeBase64Url,
-  encodeBase64Url,
-  getPasskeyAssertion,
-} from "../src/webauthn-client";
+import { createPasskey, getPasskeyAssertion } from "../src/webauthn-client";
+
+import { decodeBase64Url, encodeBase64Url } from "../src/webauthn-client-encoding";
 
 const buffer = (...values: number[]) => new Uint8Array(values).buffer;
 const encoded = (...values: number[]) => encodeBase64Url(buffer(...values));

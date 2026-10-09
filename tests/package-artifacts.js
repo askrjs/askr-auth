@@ -3,10 +3,11 @@ import { readFileSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 import { readPackRecord } from "./pack-result.js";
 
-const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+const npmCli = process.env.npm_execpath;
+if (!npmCli) throw new Error("Run artifact checks through npm run pack:check.");
 const packRecord = readPackRecord(
   JSON.parse(
-    execFileSync(npm, ["pack", "--ignore-scripts", "--dry-run", "--json"], {
+    execFileSync(process.execPath, [npmCli, "pack", "--ignore-scripts", "--dry-run", "--json"], {
       encoding: "utf8",
     }),
   ),

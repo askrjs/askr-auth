@@ -2,7 +2,7 @@ import { codeChallenge, randomString } from "./oidc-crypto";
 import { discoverOidcProvider } from "./oidc-discovery";
 import { exchangeOidcCode } from "./oidc-token";
 import { OidcClientError } from "./oidc-error";
-import { validateOidcIdToken } from "./jwt-validator";
+import { validateOidcIdToken } from "./oidc-id-token";
 import type { JsonWebKeySet } from "./jwt-types";
 import type {
   OidcAuthorizationRequestOptions,

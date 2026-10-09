@@ -1,5 +1,4 @@
 export * from "./mfa-error";
-export * from "./cbor";
-export * from "./cose";
+export type { CoseAlgorithm } from "./webauthn-types";
 export * from "./totp";
 export * from "./webauthn";

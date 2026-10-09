@@ -1,3 +1,5 @@
+> Historical 0.4.x proposal. For the supported 0.5.0 contract, see [the API review](../0.5.0-api.md). Base64url conversion functions are private implementation helpers in 0.5.0.
+
 # Feature request: browser-side WebAuthn ceremony helpers
 
 Status: implemented in `@askrjs/auth@0.0.6` as the ESM-only
