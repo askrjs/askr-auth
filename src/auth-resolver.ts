@@ -29,7 +29,12 @@ export function createAuth<P extends Principal = Principal, S extends AuthSessio
   options: AuthOptions<P, S> = {},
 ): AuthResolver<P, S> {
   const cookie = options.sessionCookie ?? "session";
-  const clock = options.clock ?? Date.now;
+  const clock = () => {
+    const current = (options.clock ?? Date.now)();
+    if (!Number.isFinite(current))
+      throw new TypeError("Auth session clock must return finite Unix time in milliseconds.");
+    return current;
+  };
   return {
     async resolve(request, resolveOptions = {}) {
       const signal = resolveOptions.signal ?? request.signal;

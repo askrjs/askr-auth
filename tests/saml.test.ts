@@ -9,6 +9,7 @@ import {
   createSamlServiceProvider,
   SamlValidationError,
   type SamlStoredRequest,
+  type SamlServiceProviderOptions,
 } from "../src/saml";
 
 const key = readFileSync(resolve(import.meta.dirname, "fixtures/idp-key.pem"), "utf8");
@@ -84,7 +85,7 @@ function signedResponse(assertion: string, requestId: string): string {
   return Buffer.from(signer.getSignedXml()).toString("base64");
 }
 
-function setup(store = new Store()) {
+function setup(store = new Store(), options: Partial<SamlServiceProviderOptions> = {}) {
   return {
     store,
     service: createSamlServiceProvider({
@@ -97,6 +98,7 @@ function setup(store = new Store()) {
       },
       requestStore: store,
       clock: () => now,
+      ...options,
     }),
   };
 }
@@ -120,6 +122,55 @@ async function encryptedAssertion(assertion: string): Promise<string> {
 }
 
 describe("SAML service provider", () => {
+  it.each([
+    { clock: () => now, requestTtlSeconds: 1e-100 },
+    { clock: () => 8.64e15, requestTtlSeconds: 600 },
+  ])("rejects an unrepresentable request lifetime before persisting state", async (options) => {
+    const { service, store } = setup(new Store(), options);
+    await expect(service.createAuthnRequest()).rejects.toThrow(TypeError);
+    expect(store.requests.size).toBe(0);
+  });
+  it.each([NaN, Infinity, -Infinity])(
+    "rejects invalid clock %s before consuming the signed response",
+    async (invalid) => {
+      let current = now;
+      const { service, store } = setup(new Store(), { clock: () => current });
+      const { requestId } = await service.createAuthnRequest();
+      const samlResponse = response(signedAssertion(requestId), requestId);
+      current = invalid;
+      await expect(service.validateResponse({ samlResponse })).rejects.toThrow(TypeError);
+      expect(store.consumed.size).toBe(0);
+      current = now;
+      await expect(service.validateResponse({ samlResponse })).resolves.toHaveProperty(
+        "id",
+        "user@example.com",
+      );
+    },
+  );
+
+  it.each([
+    { clockSkewSeconds: NaN },
+    { clockSkewSeconds: Infinity },
+    { clockSkewSeconds: -1 },
+    { maxAssertionAgeSeconds: NaN },
+    { maxAssertionAgeSeconds: -1 },
+    { requestTtlSeconds: Infinity },
+    { requestTtlSeconds: 0 },
+  ])("rejects invalid time policy %j", (options) => {
+    expect(() => setup(new Store(), options)).toThrow(TypeError);
+  });
+
+  it("expires signed assertions at NotOnOrAfter plus clock skew without consuming a request", async () => {
+    let current = now;
+    const { service, store } = setup(new Store(), { clock: () => current });
+    const { requestId } = await service.createAuthnRequest();
+    const samlResponse = response(signedAssertion(requestId), requestId);
+    current += 360_000;
+    await expect(service.validateResponse({ samlResponse })).rejects.toMatchObject({
+      code: "invalid-claim",
+    });
+    expect(store.consumed.size).toBe(0);
+  });
   it("should give signed-assertion metadata when metadata is requested", () => {
     const { service } = setup();
     expect(service.metadata()).toContain('WantAssertionsSigned="true"');

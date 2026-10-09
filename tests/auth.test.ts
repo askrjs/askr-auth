@@ -12,7 +12,8 @@ import {
   type AuthContext,
   type Principal,
 } from "../src";
-import { createJwtIssuer, createJwtValidator, validateOidcIdToken } from "../src/jwt";
+import { createJwtIssuer, createJwtValidator } from "../src/jwt";
+import { validateOidcIdToken } from "../src/oidc-id-token";
 import { createOidcClient } from "../src/oidc";
 
 const oidcMetadata = {
@@ -309,6 +310,64 @@ const validPayload = {
   scope: "openid profile users:read",
   roles: ["admin"],
 };
+
+describe("OIDC authorized-party binding", () => {
+  it.each([
+    { aud: "askr-client", azp: "another-client", valid: false },
+    { aud: "askr-client", azp: "askr-client", valid: true },
+    { aud: "askr-client", azp: undefined, valid: true },
+    { aud: ["askr-client", "api"], azp: "another-client", valid: false },
+    { aud: ["askr-client", "api"], azp: undefined, valid: false },
+    { aud: ["askr-client", "api"], azp: "askr-client", valid: false },
+    { aud: ["askr-client"], azp: "askr-client", valid: true },
+  ])(
+    "validates a signed token for audience $aud and authorized party $azp",
+    async ({ aud, azp, valid }) => {
+      const client = createOidcClient({
+        issuer: oidcMetadata.issuer,
+        clientId: "askr-client",
+        redirectUri: "https://app.example.test/callback?return=%2Faccount",
+        fetch: async (input, init) => {
+          const url = String(input);
+          if (url.endsWith("openid-configuration"))
+            return new Response(JSON.stringify(oidcMetadata));
+          if (url.endsWith("jwks.json")) return new Response(JSON.stringify(jwks));
+          expect(url).toBe(oidcMetadata.token_endpoint);
+          expect(new URLSearchParams(String(init?.body)).get("redirect_uri")).toBe(
+            "https://app.example.test/callback?return=%2Faccount",
+          );
+          const issued = Math.floor(Date.now() / 1000);
+          return new Response(
+            JSON.stringify({
+              access_token: "access",
+              token_type: "Bearer",
+              id_token: token({
+                sub: "user",
+                iss: oidcMetadata.issuer,
+                aud,
+                azp,
+                nonce: "nonce",
+                iat: issued,
+                exp: issued + 300,
+              }),
+            }),
+          );
+        },
+      });
+      const result = client.exchangeCode({
+        code: "code",
+        state: "state",
+        request: { state: "state", nonce: "nonce", codeVerifier: "v".repeat(43) },
+      });
+      if (valid) await expect(result).resolves.toHaveProperty("principal.id", "user");
+      else
+        await expect(result).rejects.toMatchObject({
+          code: "invalid-id-token",
+          cause: { code: "invalid_claim" },
+        });
+    },
+  );
+});
 
 describe("JWT resource server", () => {
   it("should validate a signed RS256 access token and normalize its principal", async () => {

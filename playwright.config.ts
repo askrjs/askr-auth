@@ -4,5 +4,8 @@ export default defineConfig({
   testDir: "./tests/browser",
   workers: 1,
   timeout: 30_000,
-  use: { browserName: "chromium" },
+  projects: ["chromium", "firefox", "webkit"].map((browserName) => ({
+    name: browserName,
+    use: { browserName: browserName as "chromium" | "firefox" | "webkit" },
+  })),
 });

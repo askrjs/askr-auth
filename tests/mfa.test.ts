@@ -1,19 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
   createTotpProvisioningUri,
-  decodeCbor,
-  decodeCborFirst,
-  decodeCosePublicKey,
   generateTotpSecret,
   verifyTotpCode,
   verifyWebAuthnAuthentication,
   verifyWebAuthnRegistration,
 } from "../src/mfa";
 
+import { decodeCbor, decodeCborFirst } from "../src/cbor";
+import { decodeCosePublicKey } from "../src/cose";
+
 const bytes = (value: string) => new TextEncoder().encode(value);
 function cbor(value: unknown): Uint8Array {
   const prefix = (major: number, length: number) =>
-    length < 24 ? Uint8Array.of((major << 5) | length) : Uint8Array.of((major << 5) | 24, length);
+    length < 24
+      ? Uint8Array.of((major << 5) | length)
+      : length <= 255
+        ? Uint8Array.of((major << 5) | 24, length)
+        : Uint8Array.of((major << 5) | 25, length >> 8, length & 255);
   const join = (...parts: Uint8Array[]) => {
     const result = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
     let offset = 0;
@@ -110,14 +114,18 @@ describe("TOTP", () => {
     await expect(verifyTotpCode({ secret: "not-a-secret!", code: "123456" })).rejects.toMatchObject(
       { code: "malformed-input" },
     );
-    await expect(verifyTotpCode({ secret: "AAAAAAA\n", code: "123456" })).rejects.toMatchObject(
-      { code: "malformed-input" },
-    );
+    await expect(verifyTotpCode({ secret: "AAAAAAA\n", code: "123456" })).rejects.toMatchObject({
+      code: "malformed-input",
+    });
     await expect(verifyTotpCode({ secret: "AAA", code: "123456" })).rejects.toMatchObject({
       code: "malformed-input",
     });
     expect(() =>
-      createTotpProvisioningUri({ secret: "AAAAAAA\n", issuer: "Acme", account: "user@example.com" }),
+      createTotpProvisioningUri({
+        secret: "AAAAAAA\n",
+        issuer: "Acme",
+        account: "user@example.com",
+      }),
     ).toThrow(expect.objectContaining({ code: "malformed-input" }));
     expect(() =>
       createTotpProvisioningUri({ secret: "AAA", issuer: "Acme", account: "user@example.com" }),
@@ -247,62 +255,91 @@ describe("WebAuthn", () => {
     },
   );
 
-  it("should give a stored ES256 credential when none attestation is valid", async () => {
-    const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
-      "sign",
-      "verify",
-    ]);
-    const jwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
-    const cose = cbor(
-      new Map([
-        [1, 2],
-        [3, -7],
-        [-1, 1],
-        [-2, fromB64(jwk.x!)],
-        [-3, fromB64(jwk.y!)],
-      ]),
-    );
-    const rpId = "example.test";
-    const credentialId = Uint8Array.of(1, 2, 3);
-    const challenge = Uint8Array.of(4, 5, 6);
-    const authData = new Uint8Array(37 + 16 + 2 + credentialId.length + cose.length);
-    authData.set(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes(rpId))));
-    authData[32] = 0x45;
-    authData.set(credentialId, 55);
-    authData[54] = credentialId.length;
-    authData.set(cose, 55 + credentialId.length);
-    const clientDataJSON = bytes(
-      JSON.stringify({
-        type: "webauthn.create",
-        challenge: "BAUG",
-        origin: "https://example.test",
-        crossOrigin: false,
-      }),
-    );
-    const attestationObject = cbor(
-      new Map([
-        ["fmt", "none"],
-        ["authData", authData],
-        ["attStmt", new Map()],
-      ]),
-    );
-    await expect(
-      verifyWebAuthnRegistration({
+  it.each(["ES256", "RS256", "EdDSA"] as const)(
+    "should give a stored %s credential when none attestation is valid",
+    async (profile) => {
+      const pair = (await crypto.subtle.generateKey(
+        profile === "ES256"
+          ? { name: "ECDSA", namedCurve: "P-256" }
+          : profile === "RS256"
+            ? {
+                name: "RSASSA-PKCS1-v1_5",
+                modulusLength: 2048,
+                publicExponent: Uint8Array.of(1, 0, 1),
+                hash: "SHA-256",
+              }
+            : { name: "Ed25519" },
+        true,
+        ["sign", "verify"],
+      )) as CryptoKeyPair;
+      const jwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+      const cose = cbor(
+        new Map(
+          profile === "ES256"
+            ? [
+                [1, 2],
+                [3, -7],
+                [-1, 1],
+                [-2, fromB64(jwk.x!)],
+                [-3, fromB64(jwk.y!)],
+              ]
+            : profile === "RS256"
+              ? [
+                  [1, 3],
+                  [3, -257],
+                  [-1, fromB64(jwk.n!)],
+                  [-2, fromB64(jwk.e!)],
+                ]
+              : [
+                  [1, 1],
+                  [3, -8],
+                  [-1, 6],
+                  [-2, fromB64(jwk.x!)],
+                ],
+        ),
+      );
+      const rpId = "example.test";
+      const credentialId = Uint8Array.of(1, 2, 3);
+      const challenge = Uint8Array.of(4, 5, 6);
+      const authData = new Uint8Array(37 + 16 + 2 + credentialId.length + cose.length);
+      authData.set(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes(rpId))));
+      authData[32] = 0x45;
+      authData.set(credentialId, 55);
+      authData[54] = credentialId.length;
+      authData.set(cose, 55 + credentialId.length);
+      const clientDataJSON = bytes(
+        JSON.stringify({
+          type: "webauthn.create",
+          challenge: "BAUG",
+          origin: "https://example.test",
+          crossOrigin: false,
+        }),
+      );
+      const attestationObject = cbor(
+        new Map([
+          ["fmt", "none"],
+          ["authData", authData],
+          ["attStmt", new Map()],
+        ]),
+      );
+      await expect(
+        verifyWebAuthnRegistration({
+          credentialId,
+          clientDataJSON,
+          attestationObject,
+          expectedChallenge: challenge,
+          allowedOrigins: ["https://example.test"],
+          rpId,
+        }),
+      ).resolves.toMatchObject({
         credentialId,
-        clientDataJSON,
-        attestationObject,
-        expectedChallenge: challenge,
-        allowedOrigins: ["https://example.test"],
-        rpId,
-      }),
-    ).resolves.toMatchObject({
-      credentialId,
-      algorithm: -7,
-      signCount: 0,
-      backupEligible: false,
-      backedUp: false,
-    });
-  });
+        algorithm: profile === "ES256" ? -7 : profile === "RS256" ? -257 : -8,
+        signCount: 0,
+        backupEligible: false,
+        backedUp: false,
+      });
+    },
+  );
 
   it.each([
     { storedSignCount: 0, assertionSignCount: 0 },
