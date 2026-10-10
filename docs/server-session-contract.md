@@ -258,6 +258,13 @@ by Apple without provider evidence or silently remove generated PKCE fields.
 
 ## Token acquisition and interaction
 
+An API token request without `resource` selects the provider's sole explicitly
+configured `capabilities.resources` target. Zero or multiple configured targets
+produce a configuration error; scopes never infer a target and array order never
+selects one. Canonicalize that resource before cache lookup, locking and every
+interaction-required outcome. Login without a resource remains identity-only;
+incremental API consent supplies an explicit resource.
+
 The exact cache key includes configured provider id and a stable non-secret
 policy fingerprint (canonical issuer/aliases, client, organization/connection
 constraints, resources/scopes and private policy version), then issuer + client +
