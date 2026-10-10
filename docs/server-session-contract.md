@@ -133,6 +133,9 @@ The supplied request signal participates in provider fetch cancellation; joining
 one renewal must not transfer ownership of the shared operation to a single
 joining caller. `close` aborts this engine's pending work and forbids new work.
 Closing a worker does not globally log out other workers using a shared store.
+Deduplicated renewal belongs to the engine and current identity: each `token`
+caller races its own request/option signal without aborting renewal for other
+waiters. Identity retirement or engine closure cancels the shared operation.
 
 ## Session storage and authority
 
@@ -237,6 +240,8 @@ duplicate protocol fields, a 32-KiB form-body budget, provider, state and expiry
 usable transaction. If a transaction has insufficient remaining lifetime when
 exchange completes, reject it; a slow exchange never extends its TTL.
 Callbacks cannot take arbitrary redirect destinations or extension parameters.
+The validated local `returnTo` may retain its query and fragment for the final
+application redirect; neither becomes part of the provider `redirect_uri`.
 
 Query-mode transactions use SameSite=Lax and accept GET only. Form-post
 transactions use SameSite=None;Secure and accept only a bounded

@@ -6,6 +6,7 @@ export default defineConfig({
       index: "src/index.ts",
       jwt: "src/jwt.ts",
       oidc: "src/oidc.ts",
+      server: "src/server.ts",
       browser: "src/browser.ts",
       auth0: "src/auth0.ts",
       saml: "src/saml.ts",

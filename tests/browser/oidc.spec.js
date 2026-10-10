@@ -34,14 +34,7 @@ test.beforeAll(async () => {
   );
   execFileSync(
     process.execPath,
-    [
-      npmCli,
-      "install",
-      "--ignore-scripts",
-      "--no-audit",
-      "--no-fund",
-      join(consumer, record.filename),
-    ],
+    [npmCli, "install", "--no-audit", "--no-fund", join(consumer, record.filename)],
     {
       cwd: consumer,
       stdio: "pipe",

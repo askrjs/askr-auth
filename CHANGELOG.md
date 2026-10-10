@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 0.5.0 - 2026-10-10
+
 ### Breaking changes
 
 - Remove ten JWT/OIDC, CBOR/COSE and browser encoding implementation names from public entrypoints. See [every removal and replacement](docs/0.5.0-api.md). Keep all seven provider/client entrypoints and the public `CoseAlgorithm` credential contract.
@@ -25,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reject invalid TOTP timestamps and skip drift counters outside the non-negative safe integer range.
 - Bind an explicit OIDC authorized party to the configured client even for a single audience, and reject additional audiences without configured trust.
 - Use real cross-origin frame messages in the browser correlation test and dispatch npm artifact checks through Node on Windows.
+
+### Development
+
+- First-party development workflows use Vite+; specialized compiler, runtime,
+  browser, and package checks remain part of validation.
 
 ## 0.4.2 - 2026-10-08
 

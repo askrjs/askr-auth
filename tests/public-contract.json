@@ -8,6 +8,7 @@
     "./oidc",
     "./package.json",
     "./saml",
+    "./server",
     "./webauthn-client"
   ],
   "entrypoints": [
@@ -149,6 +150,30 @@
       "specifier": "@askrjs/auth/auth0",
       "values": ["createAuth0Session"],
       "types": ["Auth0SessionOptions"],
+      "removed": []
+    },
+    {
+      "specifier": "@askrjs/auth/server",
+      "values": [
+        "InteractionRequiredError",
+        "ProviderSessionError",
+        "createOidcProvider",
+        "createProviderSession"
+      ],
+      "types": [
+        "OidcProviderOptions",
+        "ProviderCapabilities",
+        "ProviderClientAuthentication",
+        "ProviderDefinition",
+        "ProviderLoginRequest",
+        "ProviderLogoutRequest",
+        "ProviderSession",
+        "ProviderSessionErrorCode",
+        "ProviderSessionOptions",
+        "ProviderSessionRecord",
+        "ProviderSessionStore",
+        "ProviderTokenRequest"
+      ],
       "removed": []
     }
   ],

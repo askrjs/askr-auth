@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vite-plus/test";
 
 const fixture = vi.hoisted(() => ({ clients: [] as any[] }));
 vi.mock("@auth0/auth0-spa-js", () => ({

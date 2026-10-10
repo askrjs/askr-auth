@@ -21,6 +21,8 @@ for (const required of [
   "dist/jwt.d.ts",
   "dist/oidc.js",
   "dist/oidc.d.ts",
+  "dist/server.js",
+  "dist/server.d.ts",
   "dist/browser.js",
   "dist/browser.d.ts",
   "dist/auth0.js",
