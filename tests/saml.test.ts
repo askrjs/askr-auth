@@ -4,7 +4,7 @@ import { inflateRawSync } from "node:zlib";
 import { resolve } from "node:path";
 import { SignedXml } from "xml-crypto";
 import { encrypt } from "xml-encryption";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import {
   createSamlServiceProvider,
   SamlValidationError,
