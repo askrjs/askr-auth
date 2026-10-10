@@ -39,6 +39,7 @@ it.each([
   { clockLeewaySeconds: -1 },
   { silent: { timeoutMs: 0 } },
   { silent: { timeoutMs: 120_001 } },
+  { silent: { responseFormat: "auto" } },
   { silent: { redirectUri: "https://other-app.test/callback" } },
   { redirectUri: "https://app.test/callback?unbound=1" },
   { redirectUri: "not-an-absolute-url" },

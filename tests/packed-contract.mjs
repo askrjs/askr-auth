@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ts from "@typescript/typescript6";
@@ -25,20 +25,16 @@ try {
     JSON.stringify({ private: true, type: "module" }),
   );
   runNpm(
-    [
-      "install",
-      "--ignore-scripts",
-      "--no-audit",
-      "--no-fund",
-      "--no-package-lock",
-      join(consumer, packed.filename),
-    ],
+    ["install", "--no-audit", "--no-fund", "--no-package-lock", join(consumer, packed.filename)],
     { cwd: consumer, stdio: "pipe" },
   );
+  await assert.rejects(access(join(consumer, "node_modules/@auth0/auth0-spa-js")));
   const manifest = JSON.parse(
     await readFile(join(consumer, "node_modules/@askrjs/auth/package.json"), "utf8"),
   );
   assert.deepEqual(Object.keys(manifest.exports).sort(), contract.exportKeys);
+  assert.equal(manifest.peerDependencies["@auth0/auth0-spa-js"], "^2.28.3");
+  assert.equal(manifest.peerDependenciesMeta["@auth0/auth0-spa-js"].optional, true);
   const imports = contract.entrypoints
     .map((entry, index) => `import * as Entry${index} from '${entry.specifier}';`)
     .join("\n");
@@ -57,7 +53,13 @@ try {
     const requirement: Entry0.AuthRequirement = Entry0.requireRole('admin');
     const jwt: Entry1.JwtValidatorOptions = { issuer: 'issuer', jwks: { keys: [] }, clock: () => 0 };
     const oidc: Entry2.OidcClientOptions = { issuer: 'https://issuer.test', clientId: 'client', redirectUri: 'https://app.test/callback' };
-    const browser: Entry3.BrowserOidcSessionOptions = oidc;
+    const browser: Entry3.BrowserOidcSessionOptions = { ...oidc, authorizationParams: { audience: "https://api.test" }, silent: { responseFormat: "auth0" } };
+    const sdk: Entry7.Auth0SessionOptions = { domain: "tenant.auth0.com", clientId: "client", redirectUri: "https://app.test/callback" };
+    // @ts-expect-error SDK persistence/cache configuration is deliberately not an Askr option.
+    const persistent: Entry7.Auth0SessionOptions = { ...sdk, cacheLocation: "localstorage" };
+    // @ts-expect-error Response formats must be explicitly selected.
+    const guessed: Entry3.BrowserOidcSessionOptions = { ...oidc, silent: { responseFormat: "auto" } };
+    void [sdk, persistent, guessed];
     const totp: Entry5.VerifyTotpOptions = { secret: 'secret', code: '123456', at: new Date() };
     const algorithm: Entry5.CoseAlgorithm = -7;
     const challenge: Entry6.GetPasskeyAssertionOptions = { challenge: 'AQID', rpId: 'app.test' };
@@ -131,7 +133,8 @@ try {
     `
     import assert from 'node:assert/strict';
     import { generateKeyPairSync } from 'node:crypto';
-    for (const entry of ${JSON.stringify(contract.entrypoints)}) {
+    assert.equal(typeof globalThis.window, "undefined");
+    for (const entry of ${JSON.stringify(contract.entrypoints.filter((entry) => entry.specifier !== "@askrjs/auth/auth0"))}) {
       const values = await import(entry.specifier);
       assert.deepEqual(Object.keys(values).sort(), entry.values, entry.specifier);
     }
@@ -152,6 +155,41 @@ try {
   `,
   );
   execFileSync(process.execPath, [join(consumer, "runtime.mjs")], { cwd: consumer, stdio: "pipe" });
+  // The adapter is opt-in: importing it without its optional SDK fails, while
+  // all native/server paths and every declaration above work without that peer.
+  await writeFile(
+    join(consumer, "adapter-missing.mjs"),
+    `import assert from 'node:assert/strict'; await assert.rejects(import('@askrjs/auth/auth0'), { code: 'ERR_MODULE_NOT_FOUND' });`,
+  );
+  execFileSync(process.execPath, [join(consumer, "adapter-missing.mjs")], {
+    cwd: consumer,
+    stdio: "pipe",
+  });
+  runNpm(["install", "--no-audit", "--no-fund", "@auth0/auth0-spa-js@2.28.3"], {
+    cwd: consumer,
+    stdio: "pipe",
+  });
+  await writeFile(
+    join(consumer, "adapter-installed.mjs"),
+    `import assert from 'node:assert/strict'; import * as adapter from '@askrjs/auth/auth0'; assert.deepEqual(Object.keys(adapter), ['createAuth0Session']); assert.equal(typeof globalThis.window, 'undefined');`,
+  );
+  execFileSync(process.execPath, [join(consumer, "adapter-installed.mjs")], {
+    cwd: consumer,
+    stdio: "pipe",
+  });
+  const compilers = [];
+  for (const compiler of ["typescript", "@typescript/typescript6"]) {
+    const executable = join(root, "node_modules", compiler, "bin/tsc");
+    compilers.push(
+      execFileSync(process.execPath, [executable, "--version"], { encoding: "utf8" })
+        .trim()
+        .replace(/^Version /, ""),
+    );
+    execFileSync(process.execPath, [executable, "-p", "tsconfig.json"], {
+      cwd: consumer,
+      stdio: "pipe",
+    });
+  }
   console.log(
     JSON.stringify({
       declarationNames: contract.entrypoints.reduce(
@@ -160,8 +198,10 @@ try {
       ),
       removedNames: contract.entrypoints.reduce((count, entry) => count + entry.removed.length, 0),
       privateSubpaths: contract.privateSubpaths.length,
-      compilers: ["6.0.2", "7.0.2"],
+      compilers,
       normalInstall: true,
+      nativeSdkAbsent: true,
+      optionalSdkNormalInstall: "2.28.3",
     }),
   );
 } finally {

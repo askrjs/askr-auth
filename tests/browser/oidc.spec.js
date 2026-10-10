@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from "node:child_process";
 import { generateKeyPairSync, sign } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -48,6 +48,7 @@ test.beforeAll(async () => {
       timeout: 120_000,
     },
   );
+  await expect(access(join(consumer, "node_modules/@auth0/auth0-spa-js"))).rejects.toThrow();
 }, 120_000);
 
 test.afterAll(async () => {
@@ -91,8 +92,10 @@ test.beforeEach(async ({ page }) => {
     } else if (url.pathname === "/authorize") {
       const state = url.searchParams.get("state");
       const nonce = url.searchParams.get("nonce");
-      const response =
+      const flat =
         silentMode === "interaction" ? { state, error: "login_required" } : { state, code: nonce };
+      const response =
+        silentMode === "auth0" ? { type: "authorization_response", response: flat } : flat;
       await route.fulfill({
         contentType: "text/html",
         body:
@@ -460,6 +463,136 @@ test("web-message transport ignores wrong origin, source, state and malformed re
   const result = await page.evaluate(() => window.renewal);
   expect(result.status).toBe("authenticated");
   expect(tokenExchanges).toBe(1);
+  await expect(page.locator("iframe")).toHaveCount(0);
+});
+
+test("native selected Auth0 format accepts the provider nested response", async ({ page }) => {
+  silentMode = "auth0";
+  await createSession(page, { silent: { timeoutMs: 5000, responseFormat: "auth0" } });
+  expect(await page.evaluate(() => window.session.getToken())).toMatchObject({
+    status: "authenticated",
+    principal: { id: "browser-user" },
+  });
+  await expect(page.locator("iframe")).toHaveCount(0);
+});
+
+test("explicit Auth0 response format keeps native origin, source, transaction and parameter ownership", async ({
+  page,
+}) => {
+  await createSession(page, {
+    authorizationParams: {
+      audience: "https://api.example.test",
+      organization: "org_demo",
+      prompt: "login",
+    },
+    silent: { timeoutMs: 5000, responseFormat: "auth0" },
+  });
+  const callback = await page.evaluate(async () => {
+    const url = new URL(await window.session.login());
+    window.interactiveParams = Object.fromEntries(url.searchParams);
+    return `http://localhost/callback?state=${url.searchParams.get("state")}&code=${url.searchParams.get("nonce")}`;
+  });
+  expect(await page.evaluate(() => window.interactiveParams)).toMatchObject({
+    audience: "https://api.example.test",
+    organization: "org_demo",
+    prompt: "login",
+  });
+  await page.evaluate((callback) => window.session.restore(callback), callback);
+  silentMode = "hold";
+  await page.evaluate(() => {
+    window.sessionClock += 50_000;
+    window.renewal = window.session.getToken();
+    window.providerMessages = 0;
+    window.addEventListener("message", () => {
+      window.providerMessages++;
+    });
+  });
+  await expect(page.locator("iframe")).toHaveCount(1);
+  await page.frameLocator("iframe").locator("body").waitFor({ state: "attached" });
+  const frame = page.frames().find((frame) => frame.url().startsWith(`${issuer}/authorize`));
+  if (!frame) throw new Error("Missing provider frame.");
+  const valid = await page.evaluate(() => {
+    const url = new URL(document.querySelector("iframe").src);
+    window.silentParams = Object.fromEntries(url.searchParams);
+    return { state: url.searchParams.get("state"), code: url.searchParams.get("nonce") };
+  });
+  expect(await page.evaluate(() => window.silentParams)).toMatchObject({
+    audience: "https://api.example.test",
+    organization: "org_demo",
+    prompt: "none",
+    response_mode: "web_message",
+  });
+  const nested = { type: "authorization_response", response: valid };
+  await page.route("https://attacker.test/message", (route) =>
+    route.fulfill({ contentType: "text/html", body: "<p>attacker</p>" }),
+  );
+  await page.evaluate(() => {
+    const attacker = document.createElement("iframe");
+    attacker.id = "attacker";
+    attacker.src = "https://attacker.test/message";
+    document.body.append(attacker);
+  });
+  await page
+    .frameLocator("#attacker")
+    .locator("body")
+    .evaluate((_body, data) => parent.postMessage(data, "*"), nested);
+  await page.evaluate(
+    (data) =>
+      window.dispatchEvent(
+        new MessageEvent("message", { origin: "https://login.example.test", source: window, data }),
+      ),
+    nested,
+  );
+  await frame.evaluate((data) => {
+    for (const invalid of [
+      data.response,
+      { ...data, type: "wrong" },
+      { ...data, response: null },
+      { ...data, response: Object.assign([], data.response) },
+      { ...data, response: { ...data.response, state: "wrong" } },
+      { ...data, response: { ...data.response, error: "login_required" } },
+      { ...data, response: { ...data.response, code: "" } },
+    ])
+      parent.postMessage(invalid, "*");
+  }, nested);
+  await page.waitForFunction(() => window.providerMessages === 9);
+  expect(tokenExchanges).toBe(1);
+  await page.locator("#attacker").evaluate((frame) => frame.remove());
+  await expect(page.locator("iframe")).toHaveCount(1);
+  await frame.evaluate((data) => parent.postMessage(data, "*"), nested);
+  expect(await page.evaluate(() => window.renewal)).toMatchObject({
+    status: "authenticated",
+    accessToken: "access-2",
+  });
+  await expect(page.locator("iframe")).toHaveCount(0);
+});
+
+test("Auth0 response selection retains native timeout and cancellation cleanup", async ({
+  page,
+}) => {
+  silentMode = "hold";
+  await createSession(page, { silent: { timeoutMs: 25, responseFormat: "auth0" } });
+  expect(
+    await page.evaluate(async () => {
+      try {
+        await window.session.getToken();
+      } catch (error) {
+        return error.code;
+      }
+    }),
+  ).toBe("silent-timeout");
+  await expect(page.locator("iframe")).toHaveCount(0);
+  await createSession(page, { silent: { timeoutMs: 5000, responseFormat: "auth0" } });
+  await page.evaluate(() => {
+    window.renewal = window.session.getToken().catch((error) => error.code);
+  });
+  await expect(page.locator("iframe")).toHaveCount(1);
+  expect(
+    await page.evaluate(async () => {
+      window.session.dispose();
+      return window.renewal;
+    }),
+  ).toBe("cancelled");
   await expect(page.locator("iframe")).toHaveCount(0);
 });
 

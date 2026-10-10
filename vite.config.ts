@@ -7,6 +7,7 @@ export default defineConfig({
       jwt: "src/jwt.ts",
       oidc: "src/oidc.ts",
       browser: "src/browser.ts",
+      auth0: "src/auth0.ts",
       saml: "src/saml.ts",
       mfa: "src/mfa.ts",
       "webauthn-client": "src/webauthn-client.ts",
@@ -17,7 +18,7 @@ export default defineConfig({
     dts: true,
     sourcemap: "hidden",
     deps: {
-      neverBundle: [/^node:/],
+      neverBundle: [/^node:/, /^@auth0\/auth0-spa-js$/],
     },
   },
 });

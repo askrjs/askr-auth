@@ -19,6 +19,8 @@ export interface BrowserOidcSessionOptions extends Omit<OidcClientOptions, "clie
         redirectUri?: string;
         /** Bounded iframe response timeout; at most two minutes. Defaults to 15 seconds. */
         timeoutMs?: number;
+        /** Explicit web-message envelope. Defaults to the generic flat response. */
+        responseFormat?: "flat" | "auth0";
       };
 }
 

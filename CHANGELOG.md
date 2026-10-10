@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Optional `@askrjs/auth/auth0` adapter using the official SDK peer with memory-only tokens, SDK-owned renewal and guarded local lifetime; includes a framework-neutral signed-provider example. See [SDK validation and ownership limits](docs/auth0-session.md).
+- Bounded native provider authorization parameters and explicitly selected Auth0 nested web-message format, retaining native origin/source/state and signature checks.
 - Installed package contract checks under TypeScript 6 and 7, and Chromium/Firefox/WebKit browser qualification.
 - Real signing-key rotation, clock equality/failure/recovery, signed WebAuthn mismatch and TOTP period/replay-ownership probes.
 

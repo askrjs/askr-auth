@@ -13,6 +13,7 @@ export function authorizeWithWebMessage(
   request: OidcAuthorizationRequest,
   timeoutMs: number,
   signal: AbortSignal,
+  responseFormat: "flat" | "auth0" = "flat",
 ): Promise<BrowserAuthorizationResponse> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) {
@@ -38,8 +39,18 @@ export function authorizeWithWebMessage(
     };
     const receive = (event: MessageEvent) => {
       if (event.origin !== authorization.origin || event.source !== frame.contentWindow) return;
-      const data: unknown = event.data;
-      if (!data || typeof data !== "object") return;
+      let data: unknown = event.data;
+      if (responseFormat === "auth0") {
+        if (
+          !data ||
+          typeof data !== "object" ||
+          Array.isArray(data) ||
+          (data as { type?: unknown }).type !== "authorization_response"
+        )
+          return;
+        data = (data as { response?: unknown }).response;
+      }
+      if (!data || typeof data !== "object" || Array.isArray(data)) return;
       const response = data as Partial<BrowserAuthorizationResponse>;
       if (response.state !== request.state) return;
       if (

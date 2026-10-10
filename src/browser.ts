@@ -7,6 +7,7 @@ import {
   type BrowserOidcSessionResult,
 } from "./browser-types";
 import type { OidcAuthorizationRequest, OidcCodeExchangeResult } from "./oidc-types";
+import { providerAuthorizationParams } from "./oidc-parameters";
 
 export * from "./browser-types";
 
@@ -38,6 +39,8 @@ export function createBrowserOidcSession(options: BrowserOidcSessionOptions): Br
   const ttl = options.transactionTtlMs ?? 300_000;
   const leeway = (options.clockLeewaySeconds ?? 30) * 1000;
   const timeout = options.silent ? (options.silent.timeoutMs ?? 15_000) : 15_000;
+  const responseFormat = options.silent ? (options.silent.responseFormat ?? "flat") : "flat";
+  const authorizationParams = providerAuthorizationParams(options.authorizationParams);
   if (
     "clientSecret" in options ||
     !Number.isFinite(ttl) ||
@@ -47,7 +50,8 @@ export function createBrowserOidcSession(options: BrowserOidcSessionOptions): Br
     leeway < 0 ||
     !Number.isFinite(timeout) ||
     timeout <= 0 ||
-    timeout > 120_000
+    timeout > 120_000 ||
+    (responseFormat !== "flat" && responseFormat !== "auth0")
   )
     throw new BrowserOidcSessionError(
       "invalid-options",
@@ -145,6 +149,7 @@ export function createBrowserOidcSession(options: BrowserOidcSessionOptions): Br
       clientId: options.clientId,
       redirectUri,
       scopes: options.scopes,
+      authorizationParams,
       fetch: (input, init) =>
         request(input, {
           ...init,
@@ -354,7 +359,12 @@ export function createBrowserOidcSession(options: BrowserOidcSessionOptions): Br
       return own(operation, async () => {
         const authorization = await operation.client.createAuthorizationRequest();
         operation.check();
-        const response = await authorizeWithWebMessage(authorization, timeout, operation.signal);
+        const response = await authorizeWithWebMessage(
+          authorization,
+          timeout,
+          operation.signal,
+          responseFormat,
+        );
         operation.check();
         const interaction = authorize(response);
         if (interaction) return interaction;

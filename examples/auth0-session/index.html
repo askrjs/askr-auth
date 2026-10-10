@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Askr optional Auth0 SDK session</title>
+    <script type="importmap">
+      { "imports": { "@askrjs/auth/auth0": "/auth/auth0.js", "@auth0/auth0-spa-js": "/sdk.js" } }
+    </script>
+  </head>
+  <body>
+    <h1>Optional Auth0 SDK session</h1>
+    <p>The local demo provider issues signed tokens. Its access tokens last 180 seconds.</p>
+    <button id="login">Login</button>
+    <button id="token">Get token</button>
+    <button id="reload">Reload</button>
+    <button id="logout">Logout</button>
+    <pre id="status" aria-live="polite">Restoring...</pre>
+    <script type="module">
+      import { createAuth0Session } from "@askrjs/auth/auth0";
+
+      const session = createAuth0Session({
+        domain: location.origin,
+        clientId: "demo-spa",
+        redirectUri: `${location.origin}/callback`,
+        authorizationTimeoutSeconds: 5,
+      });
+      const status = document.querySelector("#status");
+      const buttons = [...document.querySelectorAll("button")];
+      const show = (result) => {
+        status.textContent =
+          result.status === "authenticated"
+            ? `Signed in as ${result.principal.name}. Token expires at ${new Date(result.expiresAt).toISOString()}.`
+            : `Interaction required: ${result.error}.`;
+      };
+      const run = async (action) => {
+        buttons.forEach((button) => {
+          button.disabled = true;
+        });
+        try {
+          await action();
+        } catch (error) {
+          status.textContent = `${error.code ?? error.name}: ${error.message}`;
+        } finally {
+          buttons.forEach((button) => {
+            button.disabled = false;
+          });
+        }
+      };
+      document.querySelector("#login").onclick = () =>
+        run(async () => location.assign(await session.login()));
+      document.querySelector("#token").onclick = () =>
+        run(async () => show(await session.getToken()));
+      document.querySelector("#reload").onclick = () => location.reload();
+      document.querySelector("#logout").onclick = () =>
+        run(async () => {
+          session.logout();
+          await fetch("/v2/logout", { method: "POST" });
+          status.textContent = "Signed out.";
+        });
+      await run(async () => {
+        try {
+          show(await session.restore());
+        } finally {
+          if (location.pathname === "/callback") history.replaceState({}, "", "/");
+        }
+      });
+    </script>
+  </body>
+</html>
