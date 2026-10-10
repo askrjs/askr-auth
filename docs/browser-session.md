@@ -81,3 +81,27 @@ the application/provider. Local logout alone does not end an IdP cookie session.
 Third-party-cookie/privacy restrictions, CSP frame policy, or unsupported response
 modes can prevent silent renewal; offer interactive login. See the runnable
 [standalone SPA](../examples/browser-session/README.md).
+
+## Provider parameters and Auth0 messages
+
+`OidcClientOptions.authorizationParams`, also accepted by browser sessions, is a
+snapshot of provider extension strings such as audience, organization, connection
+and prompt. It accepts at most 32 own data properties, 64-character ASCII parameter
+names, 2048-character values and 8192 total characters. Arrays, accessors, symbols,
+non-string values and protocol-owned keys are rejected with
+`OidcClientError("invalid-authorization-params")`. State, nonce, PKCE, client
+credentials/ID, response type, redirect URI, scope, response mode and login hint
+stay with dedicated options and generated transaction ownership. Silent requests
+always replace an extension prompt with `none`.
+
+The default silent format remains `flat`. For providers using Auth0 web messages,
+select `silent: { responseFormat: "auth0" }` explicitly. The accepted payload is
+`{ type: "authorization_response", response: { state, code } }`, or the same
+nested response with an error. No format is guessed. Selection changes only the
+payload envelope: exact provider origin, created iframe window, state, nonempty
+exclusive code/error, timeout, cancellation and cleanup checks still apply.
+ID tokens continue through native signature/JWKS verification.
+
+For the optional official SDK path, use
+[`createAuth0Session`](auth0-session.md) from `@askrjs/auth/auth0`; install its SDK
+peer explicitly. The native browser/server paths remain independent of that SDK.

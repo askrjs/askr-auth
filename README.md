@@ -13,6 +13,7 @@ Framework-owned, domain-neutral authentication primitives for Askr. Server use r
 | `@askrjs/auth/jwt`     | RS256/ES256 issuance and validation, claims, JWKS rollover                                          | Token persistence or revocation lists                            |
 | `@askrjs/auth/oidc`    | Discovery, authorization-code PKCE, callback correlation, verified ID-token-to-`Principal` exchange | Provider UI, account linking, refresh-token storage              |
 | `@askrjs/auth/browser` | Optional browser session, redirect transactions, memory-only tokens, shared expiry renewal          | Provider logout, application identity/policy, persistent tokens  |
+| `@askrjs/auth/auth0`   | Optional official Auth0 SDK adaptation to the browser session contract                              | Native JOSE validation, provider logout, durable users/policy    |
 | `@askrjs/auth/saml`    | SP metadata and requests, signed/encrypted response validation, request correlation                 | IdP operation, SLO, IdP-initiated SAML, external CA trust policy |
 | `@askrjs/auth/mfa`     | TOTP and WebAuthn registration/authentication verification                                          | Credential storage, recovery policy, enrollment UI               |
 
@@ -40,7 +41,9 @@ encoding support. JWT decoding uses browser-native bytes and needs no Node
 request for callback correlation. The optional
 [browser session layer](docs/browser-session.md) owns redirect correlation and
 expiry renewal while applications retain navigation, provider logout, and policy.
-See the [standalone SPA example](examples/browser-session/README.md).
+See the [standalone native SPA](examples/browser-session/README.md) or the
+[optional Auth0 SDK adapter](docs/auth0-session.md) and its
+[framework-neutral SPA](examples/auth0-session/README.md).
 
 ```ts
 import { createOidcClient } from "@askrjs/auth/oidc";

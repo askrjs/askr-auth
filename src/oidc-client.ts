@@ -3,6 +3,7 @@ import { discoverOidcProvider } from "./oidc-discovery";
 import { exchangeOidcCode } from "./oidc-token";
 import { OidcClientError } from "./oidc-error";
 import { validateOidcIdToken } from "./oidc-id-token";
+import { providerAuthorizationParams } from "./oidc-parameters";
 import type { JsonWebKeySet } from "./jwt-types";
 import type {
   OidcAuthorizationRequestOptions,
@@ -17,6 +18,7 @@ export * from "./oidc-types";
 
 /** Create an OIDC client with discovery caching and ID-token validation. @param options Provider and client configuration. @returns Configured OIDC client. */
 export function createOidcClient(options: OidcClientOptions): OidcClient {
+  const authorizationParams = providerAuthorizationParams(options.authorizationParams);
   const issuer = options.issuer;
   const request = options.fetch ?? globalThis.fetch.bind(globalThis);
   let metadata: OidcProviderMetadata | undefined;
@@ -39,6 +41,8 @@ export function createOidcClient(options: OidcClientOptions): OidcClient {
       const nonce = input.nonce ?? randomString();
       const verifier = input.codeVerifier ?? randomString(48);
       const url = new URL(discovered.authorization_endpoint);
+      for (const [name, value] of Object.entries(authorizationParams))
+        url.searchParams.set(name, value);
       url.searchParams.set("response_type", "code");
       url.searchParams.set("client_id", options.clientId);
       url.searchParams.set("redirect_uri", options.redirectUri);

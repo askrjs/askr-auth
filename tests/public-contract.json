@@ -1,6 +1,7 @@
 {
   "exportKeys": [
     ".",
+    "./auth0",
     "./browser",
     "./jwt",
     "./mfa",
@@ -143,6 +144,12 @@
         "PasskeyRegistration"
       ],
       "removed": ["decodeBase64Url", "encodeBase64Url"]
+    },
+    {
+      "specifier": "@askrjs/auth/auth0",
+      "values": ["createAuth0Session"],
+      "types": ["Auth0SessionOptions"],
+      "removed": []
     }
   ],
   "privateSubpaths": [

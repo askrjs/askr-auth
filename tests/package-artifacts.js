@@ -23,6 +23,8 @@ for (const required of [
   "dist/oidc.d.ts",
   "dist/browser.js",
   "dist/browser.d.ts",
+  "dist/auth0.js",
+  "dist/auth0.d.ts",
   "dist/saml.js",
   "dist/saml.d.ts",
   "dist/mfa.js",
