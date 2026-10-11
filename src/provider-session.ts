@@ -684,11 +684,9 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
         authorization.searchParams.set(name, value);
       if (provider.responseMode === "form_post")
         authorization.searchParams.set("response_mode", "form_post");
-      if (loginOptions.resource !== undefined)
-        authorization.searchParams.set(
-          providerPolicy(provider).authorizationResourceParameter,
-          loginOptions.resource,
-        );
+      const resourceParameter = providerPolicy(provider).authorizationResourceParameter;
+      if (loginOptions.resource !== undefined && resourceParameter !== null)
+        authorization.searchParams.set(resourceParameter, loginOptions.resource);
       const correlation = await waitFor(
         sealer.seal(transactionCookie(provider.id), {
           id: result.transaction.id,
@@ -817,8 +815,9 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
           redirect_uri: `${origin}/auth/callback/${provider.id}`,
           code_verifier: transaction.verifier,
         });
-        if (transaction.resource !== undefined)
-          body.set(providerPolicy(provider).authorizationResourceParameter, transaction.resource);
+        const resourceParameter = providerPolicy(provider).authorizationResourceParameter;
+        if (transaction.resource !== undefined && resourceParameter !== null)
+          body.set(resourceParameter, transaction.resource);
         const tokens = await exchangeProviderTokens(
           provider,
           transport,
@@ -892,10 +891,13 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
                     (sameAccount && previous.value.refreshing === undefined
                       ? previous.value.refreshToken
                       : undefined),
-                  identityScopes: tokens.scopes.filter(
-                    (scope) =>
-                      scope !== "offline_access" && provider.identityScopes.includes(scope),
-                  ),
+                  identityScopes:
+                    providerPolicy(provider).tokenScopePolicy === "microsoft"
+                      ? [...new Set(["openid", ...tokens.scopes])].sort()
+                      : tokens.scopes.filter(
+                          (scope) =>
+                            scope !== "offline_access" && provider.identityScopes.includes(scope),
+                        ),
                   grants: [...grants, grant],
                   pending: [],
                 };
@@ -1023,8 +1025,9 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
                   grant_type: "refresh_token",
                   refresh_token: latest.value.refreshToken,
                   scope: scopes.join(" "),
-                  [providerPolicy(provider).authorizationResourceParameter]: resource,
                 });
+                const resourceParameter = providerPolicy(provider).authorizationResourceParameter;
+                if (resourceParameter !== null) body.set(resourceParameter, resource);
                 const tokens = await exchangeProviderTokens(
                   provider,
                   transport,

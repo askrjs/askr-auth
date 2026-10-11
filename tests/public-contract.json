@@ -8,6 +8,7 @@
     "./oidc",
     "./package.json",
     "./providers/auth0",
+    "./providers/microsoft",
     "./saml",
     "./server",
     "./webauthn-client"
@@ -182,6 +183,12 @@
       "values": ["createAuth0Provider"],
       "types": ["Auth0ProviderOptions"],
       "removed": []
+    },
+    {
+      "specifier": "@askrjs/auth/providers/microsoft",
+      "values": ["createMicrosoftProvider"],
+      "types": ["MicrosoftProviderOptions"],
+      "removed": []
     }
   ],
   "privateSubpaths": [
@@ -200,6 +207,9 @@
     "dist/index.js",
     "dist/jwt.js",
     "dist/mfa.js",
-    "dist/cbor.js"
+    "dist/cbor.js",
+    "providers/microsoft.js",
+    "src/providers/microsoft.ts",
+    "dist/providers/microsoft.js"
   ]
 }

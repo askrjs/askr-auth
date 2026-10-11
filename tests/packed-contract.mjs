@@ -64,6 +64,15 @@ try {
     // @ts-expect-error API permission scopes belong to an explicit resource policy.
     const nativeScopes: Entry9.Auth0ProviderOptions = { ...nativeOptions, identityScopes: ["read:records"] };
     void [nativeProvider, nativeCache, nativeRedirect, nativeScopes];
+    const microsoftOptions: Entry10.MicrosoftProviderOptions = { id: "microsoft", tenantId: "12345678-1234-1234-1234-123456789abc", clientId: "client", clientSecret: "secret", resources: [{ resource: "https://graph.microsoft.com", scopes: ["https://graph.microsoft.com/User.Read"] }] };
+    const microsoftProvider: Entry8.ProviderDefinition = Entry10.createMicrosoftProvider(microsoftOptions);
+    // @ts-expect-error Browser SDK cache configuration is not a server preset option.
+    const microsoftCache: Entry10.MicrosoftProviderOptions = { ...microsoftOptions, cacheLocation: "localstorage" };
+    // @ts-expect-error App callback routing belongs to the shared engine.
+    const microsoftRedirect: Entry10.MicrosoftProviderOptions = { ...microsoftOptions, redirectUri: "https://app.test/callback" };
+    // @ts-expect-error Qualified API permissions belong to explicit resource policies.
+    const microsoftScopes: Entry10.MicrosoftProviderOptions = { ...microsoftOptions, identityScopes: ["https://graph.microsoft.com/User.Read"] };
+    void [microsoftProvider, microsoftCache, microsoftRedirect, microsoftScopes];
     // @ts-expect-error SDK persistence/cache configuration is deliberately not an Askr option.
     const persistent: Entry7.Auth0SessionOptions = { ...sdk, cacheLocation: "localstorage" };
     // @ts-expect-error Response formats must be explicitly selected.
@@ -194,6 +203,14 @@ try {
     cwd: consumer,
     stdio: "pipe",
   });
+  await writeFile(
+    join(consumer, "provider-microsoft-native.mjs"),
+    await readFile("tests/provider-microsoft-native.mjs"),
+  );
+  execFileSync(process.execPath, [join(consumer, "provider-microsoft-native.mjs")], {
+    cwd: consumer,
+    stdio: "pipe",
+  });
   // The adapter is opt-in: importing it without its optional SDK fails, while
   // all native/server paths and every declaration above work without that peer.
   await writeFile(
@@ -241,6 +258,7 @@ try {
       normalInstall: true,
       nativeSdkAbsent: true,
       nativeAuth0SignedHttp: true,
+      nativeMicrosoftSignedHttp: true,
       optionalSdkNormalInstall: "2.28.3",
     }),
   );
