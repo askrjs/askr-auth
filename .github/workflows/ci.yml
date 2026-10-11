@@ -52,10 +52,12 @@ jobs:
         run: npm test
 
       - name: Type checks
+        shell: bash
         run: |
           npm run typecheck --if-present
           npm run test:types --if-present
       - name: Qualify installed package
+        shell: bash
         run: |
           npm run test:publint
           npm run pack:check
