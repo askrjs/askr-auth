@@ -33,10 +33,61 @@ try {
     await readFile(join(consumer, "node_modules/@askrjs/auth/package.json"), "utf8"),
   );
   assert.deepEqual(Object.keys(manifest.exports).sort(), contract.exportKeys);
-  assert.equal(manifest.peerDependencies["@auth0/auth0-spa-js"], "^2.28.3");
-  assert.equal(manifest.peerDependenciesMeta["@auth0/auth0-spa-js"].optional, true);
+  for (const field of [
+    "dependencies",
+    "devDependencies",
+    "optionalDependencies",
+    "peerDependencies",
+    "peerDependenciesMeta",
+  ])
+    assert.equal(Object.hasOwn(manifest[field] ?? {}, "@auth0/auth0-spa-js"), false, field);
+  const installedGraph = JSON.parse(
+    runNpm(["ls", "--all", "--json"], { cwd: consumer, encoding: "utf8" }),
+  );
+  const assertSdkAbsent = (node) => {
+    for (const [name, dependency] of Object.entries(node.dependencies ?? {})) {
+      assert.notEqual(
+        name,
+        "@auth0/auth0-spa-js",
+        "Retired SDK must be absent at every installed graph depth.",
+      );
+      assertSdkAbsent(dependency);
+    }
+  };
+  assertSdkAbsent(installedGraph);
+  // Preserve the existing declaration-owner aliases by explicit specifier;
+  // removing public entries must not silently change MFA/WebAuthn/provider owners.
+  const entryAliases = new Map([
+    ["@askrjs/auth", "Entry0"],
+    ["@askrjs/auth/jwt", "Entry1"],
+    ["@askrjs/auth/oidc", "Entry2"],
+    ["@askrjs/auth/saml", "Entry4"],
+    ["@askrjs/auth/mfa", "Entry5"],
+    ["@askrjs/auth/webauthn-client", "Entry6"],
+    ["@askrjs/auth/server", "Entry8"],
+    ["@askrjs/auth/providers/auth0", "Entry9"],
+    ["@askrjs/auth/providers/microsoft", "Entry10"],
+    ["@askrjs/auth/providers/google", "Entry11"],
+    ["@askrjs/auth/providers/apple", "Entry12"],
+  ]);
+  assert.deepEqual(
+    [...entryAliases.keys()].sort(),
+    contract.entrypoints.map((entry) => entry.specifier).sort(),
+  );
+  const deniedSpecifiers = [
+    ...contract.retiredEntrypoints.map((entry) => entry.specifier),
+    ...contract.privateSubpaths.map((path) => "@askrjs/auth/" + path),
+  ];
+  assert.equal(new Set(deniedSpecifiers).size, deniedSpecifiers.length);
+  const deniedImports = deniedSpecifiers
+    .map(
+      (specifier, index) =>
+        `// @ts-expect-error Retired or private entry must remain unavailable.\nimport * as Denied${index} from '${specifier}';`,
+    )
+    .join("\n");
+  await writeFile(join(consumer, "denied.mts"), deniedImports + "\n");
   const imports = contract.entrypoints
-    .map((entry, index) => `import * as Entry${index} from '${entry.specifier}';`)
+    .map((entry) => `import * as ${entryAliases.get(entry.specifier)} from '${entry.specifier}';`)
     .join("\n");
   const negatives = contract.entrypoints
     .flatMap((entry, index) =>
@@ -53,8 +104,6 @@ try {
     const requirement: Entry0.AuthRequirement = Entry0.requireRole('admin');
     const jwt: Entry1.JwtValidatorOptions = { issuer: 'issuer', jwks: { keys: [] }, clock: () => 0 };
     const oidc: Entry2.OidcClientOptions = { issuer: 'https://issuer.test', clientId: 'client', redirectUri: 'https://app.test/callback' };
-    const browser: Entry3.BrowserOidcSessionOptions = { ...oidc, authorizationParams: { audience: "https://api.test" }, silent: { responseFormat: "auth0" } };
-    const sdk: Entry7.Auth0SessionOptions = { domain: "tenant.auth0.com", clientId: "client", redirectUri: "https://app.test/callback" };
     const nativeOptions: Entry9.Auth0ProviderOptions = { id: "auth0", domain: "tenant.auth0.com", clientId: "client", clientSecret: "secret", organization: "org_expected", organizationName: "acme", resources: [{ resource: "https://api.test", scopes: ["read:records"] }] };
     const nativeProvider: Entry8.ProviderDefinition = Entry9.createAuth0Provider(nativeOptions);
     // @ts-expect-error Browser SDK cache options do not configure the native server preset.
@@ -93,11 +142,6 @@ try {
     // @ts-expect-error The server secret cache has no public policy knob.
     const appleCache: Entry12.AppleProviderOptions = { ...appleOptions, cacheTtl: 300 };
     void [appleProvider, appleResources, appleRedirect, appleKeyPath, appleCache];
-    // @ts-expect-error SDK persistence/cache configuration is deliberately not an Askr option.
-    const persistent: Entry7.Auth0SessionOptions = { ...sdk, cacheLocation: "localstorage" };
-    // @ts-expect-error Response formats must be explicitly selected.
-    const guessed: Entry3.BrowserOidcSessionOptions = { ...oidc, silent: { responseFormat: "auto" } };
-    void [sdk, persistent, guessed];
     const totp: Entry5.VerifyTotpOptions = { secret: 'secret', code: '123456', at: new Date() };
     const algorithm: Entry5.CoseAlgorithm = -7;
     const challenge: Entry6.GetPasskeyAssertionOptions = { challenge: 'AQID', rpId: 'app.test' };
@@ -105,7 +149,7 @@ try {
     const missing: Entry0.Principal = {};
     // @ts-expect-error Only supported WebAuthn key algorithms can be persisted.
     const unsupported: Entry5.CoseAlgorithm = -999;
-    void [principal, requirement, jwt, oidc, browser, totp, algorithm, challenge, missing, unsupported];
+    void [principal, requirement, jwt, oidc, totp, algorithm, challenge, missing, unsupported];
   `,
   );
   await writeFile(
@@ -120,7 +164,7 @@ try {
         types: [],
         lib: ["ES2022", "DOM"],
       },
-      files: ["fixture.ts"],
+      files: ["fixture.ts", "denied.mts"],
     }),
   );
   execFileSync(
@@ -172,10 +216,14 @@ try {
     import assert from 'node:assert/strict';
     import { generateKeyPairSync } from 'node:crypto';
     assert.equal(typeof globalThis.window, "undefined");
-    for (const entry of ${JSON.stringify(contract.entrypoints.filter((entry) => entry.specifier !== "@askrjs/auth/auth0"))}) {
+    assert.equal(typeof globalThis.document, "undefined");
+    assert.equal(typeof globalThis.sessionStorage, "undefined");
+    for (const entry of ${JSON.stringify(contract.entrypoints)}) {
       const values = await import(entry.specifier);
       assert.deepEqual(Object.keys(values).sort(), entry.values, entry.specifier);
     }
+    for (const specifier of ${JSON.stringify(contract.retiredEntrypoints.map((entry) => entry.specifier))})
+      await assert.rejects(import(specifier), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
     for (const path of ${JSON.stringify(contract.privateSubpaths)})
       await assert.rejects(import('@askrjs/auth/' + path), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
     const { createJwtIssuer, createJwtValidator } = await import('@askrjs/auth/jwt');
@@ -267,28 +315,13 @@ try {
     cwd: consumer,
     stdio: "pipe",
   });
-  // The adapter is opt-in: importing it without its optional SDK fails, while
-  // all native/server paths and every declaration above work without that peer.
-  await writeFile(
-    join(consumer, "adapter-missing.mjs"),
-    `import assert from 'node:assert/strict'; await assert.rejects(import('@askrjs/auth/auth0'), { code: 'ERR_MODULE_NOT_FOUND' });`,
-  );
-  execFileSync(process.execPath, [join(consumer, "adapter-missing.mjs")], {
-    cwd: consumer,
-    stdio: "pipe",
-  });
-  runNpm(["install", "--no-audit", "--no-fund", "@auth0/auth0-spa-js@2.28.3"], {
-    cwd: consumer,
-    stdio: "pipe",
-  });
-  await writeFile(
-    join(consumer, "adapter-installed.mjs"),
-    `import assert from 'node:assert/strict'; import * as adapter from '@askrjs/auth/auth0'; assert.deepEqual(Object.keys(adapter), ['createAuth0Session']); assert.equal(typeof globalThis.window, 'undefined');`,
-  );
-  execFileSync(process.execPath, [join(consumer, "adapter-installed.mjs")], {
-    cwd: consumer,
-    stdio: "pipe",
-  });
+  // A stripped negative fixture must fail for every denied path under each
+  // actual compiler; successful directives alone are not the negative control.
+  const stripped = deniedImports.replace(/^\s*\/\/ @ts-expect-error[^\n]*\n/gmu, "");
+  await writeFile(join(consumer, "denied-stripped.mts"), stripped + "\n");
+  const deniedConfig = JSON.parse(await readFile(join(consumer, "tsconfig.json"), "utf8"));
+  deniedConfig.files = ["denied-stripped.mts"];
+  await writeFile(join(consumer, "tsconfig.denied.json"), JSON.stringify(deniedConfig));
   const compilers = [];
   for (const compiler of ["typescript", "@typescript/typescript6"]) {
     const executable = join(root, "node_modules", compiler, "bin/tsc");
@@ -301,6 +334,28 @@ try {
       cwd: consumer,
       stdio: "pipe",
     });
+    let negativeOutput;
+    try {
+      execFileSync(
+        process.execPath,
+        [executable, "-p", "tsconfig.denied.json", "--pretty", "false"],
+        { cwd: consumer, stdio: "pipe" },
+      );
+    } catch (error) {
+      assert.notEqual(error.status, 0);
+      negativeOutput = String(error.stdout ?? "") + String(error.stderr ?? "");
+    }
+    assert.notEqual(negativeOutput, undefined, "Stripped denied imports unexpectedly compiled.");
+    const codes = [...negativeOutput.matchAll(/\berror TS(\d+):/gu)].map((match) =>
+      Number(match[1]),
+    );
+    assert.equal(codes.length, deniedSpecifiers.length, negativeOutput);
+    assert.equal(
+      codes.every((code) => code === 2307),
+      true,
+      negativeOutput,
+    );
+    assert.equal(negativeOutput.includes("denied-stripped.mts"), true, negativeOutput);
   }
   console.log(
     JSON.stringify({
@@ -317,7 +372,9 @@ try {
       nativeMicrosoftSignedHttp: true,
       nativeGoogleSignedHttp: true,
       nativeAppleSignedHttp: true,
-      optionalSdkNormalInstall: "2.28.3",
+      retiredEntrypoints: contract.retiredEntrypoints.map((entry) => entry.specifier),
+      strippedDeniedImports: deniedSpecifiers.length,
+      sdkAbsentFromManifestAndInstalledGraph: true,
     }),
   );
 } finally {

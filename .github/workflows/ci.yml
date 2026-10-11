@@ -52,14 +52,19 @@ jobs:
         run: npm test
 
       - name: Type checks
+        shell: bash
         run: |
           npm run typecheck --if-present
           npm run test:types --if-present
       - name: Qualify installed package
+        shell: bash
         run: |
           npm run test:publint
           npm run pack:check
           npm run test:packed
+      - name: Complete repository check
+        run: npm run check
+
       - name: Create normal package archive
         id: normal-pack
         shell: bash
