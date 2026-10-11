@@ -15,7 +15,12 @@ export interface ProviderPolicy {
   readonly discoveryRevocation: boolean;
   readonly authorizationResourceParameter: string | null;
   /** Preset-only: Microsoft API response permissions are independent of validated OIDC identity. */
-  readonly tokenScopePolicy?: "microsoft" | "google";
+  readonly tokenScopePolicy?: "microsoft" | "google" | "apple";
+  /** Preset-private server hook projection; the persisted principal stays minimal. */
+  readonly signInPrincipal?: (claims: Principal, minimal: Principal) => Principal;
+  readonly profileHint?: (
+    user: string | null,
+  ) => { readonly givenName?: string; readonly familyName?: string } | undefined;
   readonly validateClaims?: (claims: Principal) => void;
   readonly fingerprint: string;
 }

@@ -10,6 +10,7 @@ export default defineConfig({
       "providers/auth0": "src/providers/auth0.ts",
       "providers/microsoft": "src/providers/microsoft.ts",
       "providers/google": "src/providers/google.ts",
+      "providers/apple": "src/providers/apple.ts",
       browser: "src/browser.ts",
       auth0: "src/auth0.ts",
       saml: "src/saml.ts",

@@ -7,6 +7,7 @@
     "./mfa",
     "./oidc",
     "./package.json",
+    "./providers/apple",
     "./providers/auth0",
     "./providers/google",
     "./providers/microsoft",
@@ -196,6 +197,12 @@
       "values": ["createGoogleProvider"],
       "types": ["GoogleProviderOptions"],
       "removed": []
+    },
+    {
+      "specifier": "@askrjs/auth/providers/apple",
+      "values": ["createAppleProvider"],
+      "types": ["AppleProviderOptions"],
+      "removed": []
     }
   ],
   "privateSubpaths": [
@@ -220,6 +227,9 @@
     "dist/providers/microsoft.js",
     "providers/google.js",
     "src/providers/google.ts",
-    "dist/providers/google.js"
+    "dist/providers/google.js",
+    "providers/apple.js",
+    "src/providers/apple.ts",
+    "dist/providers/apple.js"
   ]
 }
