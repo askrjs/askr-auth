@@ -7,6 +7,7 @@ import type {
   ProviderDefinition,
   ProviderLoginRequest,
   ProviderLogoutRequest,
+  ProviderSessionStore,
 } from "../src/server";
 
 export const appOrigin = "https://app.example.test";
@@ -57,6 +58,8 @@ export async function presetFixture(
     revocation?: string;
     resourceParameter?: string | null;
     responseScopes?: (requested: string) => unknown;
+    issueRefreshToken?: boolean;
+    store?: ProviderSessionStore;
   },
 ) {
   let now = 1_800_000_000_000;
@@ -64,6 +67,7 @@ export async function presetFixture(
   let discoveryIssuer = provider.issuer;
   let tokenIssuer = provider.issuer;
   let responseScopes = options.responseScopes;
+  let issueRefreshToken = options.issueRefreshToken ?? true;
   let exchanges = 0;
   let refreshes = 0;
   const requests: { url: string; method: string; fields: URLSearchParams }[] = [];
@@ -183,7 +187,7 @@ export async function presetFixture(
         refreshTokens.add(refresh);
         return json({
           access_token: `ACCESS_${exchanges}_${stored.resource}`,
-          refresh_token: refresh,
+          refresh_token: issueRefreshToken ? refresh : undefined,
           expires_in: 60,
           token_type: "Bearer",
           scope: responseScopes ? responseScopes(stored.scopes) : stored.scopes,
@@ -233,7 +237,7 @@ export async function presetFixture(
   const engine = createProviderSession({
     origin: appOrigin,
     providers: [provider],
-    session: { secrets: [key] },
+    session: { secrets: [key], store: options.store },
     postLogoutRedirects: ["/", "/signed-out"],
     fetch: providerFetch,
     clock: () => now,
@@ -288,6 +292,9 @@ export async function presetFixture(
       const request = appRequest(cookie, "/auth/logout");
       const response = await engine.finalize(request, await engine.logout(request, options));
       return { response, cookie: responseCookies(response, cookie) };
+    },
+    setIssueRefreshToken(value: boolean) {
+      issueRefreshToken = value;
     },
     setResponseScopes(value: (requested: string) => unknown) {
       responseScopes = value;
