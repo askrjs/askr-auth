@@ -192,7 +192,10 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
   const identities = new Map<string, { controller: AbortController; expiresAt: number }>();
   const transactions = new Map<string, AbortController>();
   const requests = new WeakMap<Request, RequestState>();
-  const renewals = new Map<string, Promise<{ authority: LocatedAuthority; token: string }>>();
+  const renewals = new Map<
+    string,
+    Promise<{ authority: LocatedAuthority; token: string; expiresAt: number }>
+  >();
   const accountChecks = new Map<string, Promise<AccountCheckResult>>();
   let closed = false;
   const live = () => {
@@ -368,6 +371,7 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
     previous: LocatedAuthority | null,
     value: Authority,
     signal: AbortSignal,
+    grantExpiresAt?: number,
   ) {
     const revision = previous ? previous.record.revision + 1 : 0;
     const sealed = await waitFor(sealer.seal("authority", value), signal);
@@ -384,10 +388,10 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
       value: sealed,
     };
     if (
-      !(await stored(
-        () => store.compareAndSwap(value.id, previous?.record.revision ?? null, next, { signal }),
-        signal,
-      ))
+      !(await stored(() => {
+        if (grantExpiresAt !== undefined) requireLiveAccessToken(grantExpiresAt);
+        return store.compareAndSwap(value.id, previous?.record.revision ?? null, next, { signal });
+      }, signal))
     )
       throw new ProviderSessionError("invalid-transaction");
     return { authority: { record: next, value }, issuance };
@@ -558,6 +562,9 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
     );
   const usable = (grant: Grant | undefined) =>
     grant !== undefined && grant.expiresAt - leeway * 1000 > now();
+  function requireLiveAccessToken(expiresAt: number) {
+    if (expiresAt <= now()) throw new ProviderSessionError("provider-unavailable");
+  }
 
   const accountFresh = (authority: Authority) => {
     const checkedAt = authority.accountCheckedAt;
@@ -1217,7 +1224,12 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
                   scopes,
                 );
                 const cached = grantFor(latest.value, resource, scopes);
-                if (usable(cached)) return { authority: latest, token: cached!.accessToken };
+                if (usable(cached))
+                  return {
+                    authority: latest,
+                    token: cached!.accessToken,
+                    expiresAt: cached!.expiresAt,
+                  };
                 if (!latest.value.refreshToken || latest.value.refreshing !== undefined)
                   throw interaction(provider, resource, scopes);
                 const current = async () => {
@@ -1293,6 +1305,7 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
                   );
                   await current();
                 }
+                const expiresAt = exchangeStart + tokens.expiresIn * 1000;
                 return stored(
                   () =>
                     store.withLock(
@@ -1318,11 +1331,20 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
                               resource,
                               scopes,
                               accessToken: tokens.accessToken,
-                              expiresAt: exchangeStart + tokens.expiresIn * 1000,
+                              expiresAt,
                             }),
                         };
-                        const committed = await commitAuthority(beforeCommit, refreshed, signal);
-                        return { authority: committed.authority, token: tokens.accessToken };
+                        const committed = await commitAuthority(
+                          beforeCommit,
+                          refreshed,
+                          signal,
+                          expiresAt,
+                        );
+                        return {
+                          authority: committed.authority,
+                          token: tokens.accessToken,
+                          expiresAt,
+                        };
                       },
                       { signal },
                     ),
@@ -1343,10 +1365,13 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
       }
       const result = await waitFor(operation, caller);
       await requireIdentity(result.authority.value, caller, provider, resource, scopes);
-      stage(
-        request,
-        await sessionIssuance(result.authority.value, result.authority.record.revision, caller),
+      const issuance = await sessionIssuance(
+        result.authority.value,
+        result.authority.record.revision,
+        caller,
       );
+      requireLiveAccessToken(result.expiresAt);
+      stage(request, issuance);
       return result.token;
     },
     async logout(request, logoutOptions = {}) {
