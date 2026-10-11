@@ -50,6 +50,7 @@ async function fixture(
   let refreshError: string | undefined;
   const refreshTokens = new Set<string>();
   const refreshSignals: AbortSignal[] = [];
+  const pendingTransports = new Set<Promise<Response>>();
   let delay: Promise<void> | undefined;
   let claims: Record<string, unknown> = {};
   const codes = new Map<string, { nonce: string; challenge: string }>();
@@ -162,10 +163,16 @@ async function fixture(
       init.signal
     )
       refreshSignals.push(init.signal);
-    return fetch(
+    const transport = fetch(
       `http://127.0.0.1:${address.port}${url.pathname}${url.search}`,
       configure.ignoreCancellation ? { ...init, signal: undefined } : init,
     );
+    pendingTransports.add(transport);
+    void transport.then(
+      () => pendingTransports.delete(transport),
+      () => pendingTransports.delete(transport),
+    );
+    return transport;
   };
   const provider = createOidcProvider({
     id: "oidc",
@@ -233,6 +240,7 @@ async function fixture(
     exchanges: () => exchanges,
     refreshes: () => refreshes,
     refreshSignals: () => [...refreshSignals],
+    pendingTransports: () => [...pendingTransports],
     refreshError: (value: string) => {
       refreshError = value;
     },
@@ -1084,3 +1092,539 @@ it("requires login for a fresh API token request after absolute session expiry",
   });
   expect(f.refreshes()).toBe(0);
 });
+
+// Auth65 carry-forward: observe held operations immediately and bound all drains.
+function observeExpiry<T>(pending: Promise<T>) {
+  return pending.then(
+    (value) => ({ status: "fulfilled" as const, value }),
+    (error: unknown) => ({ status: "rejected" as const, error }),
+  );
+}
+
+async function boundExpiry<T>(pending: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      pending,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error("Expiry carry-forward operation did not settle")),
+          2000,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+it("measures the callback grant from exchange start instead of its delayed response", async () => {
+  const f = await fixture("query", { provider: { capabilities: apiPolicy } });
+  const started = await f.start("", { resource: "https://api.test", scopes: ["read"] });
+  let release!: () => void;
+  f.delay(
+    new Promise<void>((resolve) => {
+      release = resolve;
+    }),
+  );
+  const request = f.callback(started.location, started.cookie);
+  const pending = observeExpiry(f.engine.callback(request, { provider: "oidc" }));
+  try {
+    await expect.poll(() => f.exchanges(), { timeout: 1000 }).toBe(1);
+    // The transaction and signed identity remain live, but this 60-second access
+    // grant is already expired when the provider response arrives.
+    f.advance(60_001);
+    release();
+    const result = await boundExpiry(pending);
+    if (result.status === "rejected") throw result.error;
+    const response = await f.engine.finalize(request, result.value);
+    const cookie = cookies(response, started.cookie);
+    const apiRequest = new Request(origin, { headers: { cookie } });
+    expect((await f.engine.resolve(apiRequest)).authenticated).toBe(true);
+    expect(f.refreshes()).toBe(0);
+    expect(await f.engine.token(apiRequest, "oidc", { scopes: ["read"] })).toBe("RENEWED_1");
+    expect(f.refreshes()).toBe(1);
+  } finally {
+    release();
+    await boundExpiry(pending);
+  }
+});
+
+it("does not extend cached grant deadlines or absolute session lifetime on repeated hits", async () => {
+  const f = await fixture("query", { provider: { capabilities: apiPolicy } });
+  const signed = await f.signIn({ resource: "https://api.test", scopes: ["read"] });
+  const request = () => new Request(origin, { headers: { cookie: signed.cookie } });
+  const expiresAt = (await f.engine.resolve(request())).session?.expiresAt;
+  expect(expiresAt).toEqual(expect.any(Number));
+  for (const elapsed of [5000, 10_000, 14_999]) {
+    f.advance(elapsed);
+    expect(await f.engine.token(request(), "oidc", { scopes: ["read"] })).toBe("ACCESS_CANARY");
+    expect(f.refreshes()).toBe(0);
+    expect((await f.engine.resolve(request())).session?.expiresAt).toBe(expiresAt);
+  }
+  // Exactly 30 seconds: the original 60-second grant meets the configured
+  // 30-second proactive-renewal boundary despite all preceding cache hits.
+  f.advance(1);
+  expect(await f.engine.token(request(), "oidc", { scopes: ["read"] })).toBe("RENEWED_1");
+  expect(f.refreshes()).toBe(1);
+  f.advance(29_999);
+  expect(await f.engine.token(request(), "oidc", { scopes: ["read"] })).toBe("RENEWED_1");
+  expect(f.refreshes()).toBe(1);
+  f.advance(1);
+  expect(await f.engine.token(request(), "oidc", { scopes: ["read"] })).toBe("RENEWED_2");
+  expect(f.refreshes()).toBe(2);
+  expect((await f.engine.resolve(request())).session?.expiresAt).toBe(expiresAt);
+});
+
+it("rejects an already-expired refresh result without replay or identity retirement", async () => {
+  const f = await fixture("query", { provider: { capabilities: apiPolicy } });
+  const signed = await f.signIn({ resource: "https://api.test", scopes: ["read"] });
+  const request = () => new Request(origin, { headers: { cookie: signed.cookie } });
+  const authorityId = (await f.engine.resolve(request())).session!.id;
+  f.advance(30_000);
+  let release!: () => void;
+  f.delay(
+    new Promise<void>((resolve) => {
+      release = resolve;
+    }),
+  );
+  // Observe the actual dedupe lookup without changing native Map behavior.
+  // The first owned lookup pins the exact map and full private key; only a
+  // second lookup returning its pending Promise can release the join barrier.
+  const descriptor = Object.getOwnPropertyDescriptor(Map.prototype, "get")!;
+  const originalGet = Map.prototype.get;
+  let renewalMap: Map<unknown, unknown> | undefined;
+  let renewalKey: string | undefined;
+  let joined!: () => void;
+  const joinBarrier = new Promise<void>((resolve) => {
+    joined = resolve;
+  });
+  const observedGet = function (this: Map<unknown, unknown>, key: unknown) {
+    const value = Reflect.apply(originalGet, this, [key]);
+    if (this === renewalMap && key === renewalKey && value instanceof Promise) {
+      joined();
+    } else if (renewalMap === undefined && value === undefined && typeof key === "string") {
+      let tuple: unknown;
+      try {
+        tuple = JSON.parse(key);
+      } catch {
+        return value;
+      }
+      if (
+        Array.isArray(tuple) &&
+        tuple.length === 5 &&
+        tuple[0] === authorityId &&
+        typeof tuple[1] === "string" &&
+        typeof tuple[2] === "string" &&
+        tuple[3] === "https://api.test" &&
+        Array.isArray(tuple[4]) &&
+        tuple[4].length === 1 &&
+        tuple[4][0] === "read"
+      ) {
+        renewalMap = this;
+        renewalKey = key;
+      }
+    }
+    return value;
+  };
+  const restoreGet = () => Object.defineProperty(Map.prototype, "get", descriptor);
+  Object.defineProperty(Map.prototype, "get", { ...descriptor, value: observedGet });
+  const first = observeExpiry(f.engine.token(request(), "oidc", { scopes: ["read"] }));
+  let second: ReturnType<typeof observeExpiry<string>> | undefined;
+  try {
+    await expect.poll(() => f.refreshes(), { timeout: 1000 }).toBe(1);
+    second = observeExpiry(f.engine.token(request(), "oidc", { scopes: ["read"] }));
+    await boundExpiry(joinBarrier);
+    expect(renewalMap).toBeDefined();
+    expect(renewalKey).toEqual(expect.any(String));
+    restoreGet();
+    // Both callers have joined the one consumed refresh grant. Advancing the injected
+    // clock does not expire the application identity or cancel either request.
+    f.advance(60_001);
+    release();
+    const outcomes = await boundExpiry(Promise.all([first, second]));
+    for (const result of outcomes) {
+      expect(result.status).toBe("rejected");
+      if (result.status === "rejected")
+        expect(result.error).toMatchObject({ code: "provider-unavailable" });
+    }
+    expect(f.refreshes()).toBe(1);
+    expect((await f.engine.resolve(request())).authenticated).toBe(true);
+    // A possibly consumed family remains fenced until explicit interaction;
+    // this failed acquisition must never replay its old refresh token.
+    await expect(f.engine.token(request(), "oidc", { scopes: ["read"] })).rejects.toMatchObject({
+      code: "interaction-required",
+      reason: "login",
+    });
+    expect(f.refreshes()).toBe(1);
+  } finally {
+    restoreGet();
+    release();
+    await boundExpiry(Promise.all(second === undefined ? [first] : [first, second]));
+  }
+});
+
+it("rejects expired delivery after rotation commits without discarding its current refresh family", async () => {
+  const actual = memoryAuthority(100, () => 0);
+  let armed = false;
+  let writes = 0;
+  let advanced = false;
+  const store = {
+    ...actual,
+    async compareAndSwap(...args: Parameters<typeof actual.compareAndSwap>) {
+      const committed = await actual.compareAndSwap(...args);
+      if (armed && committed && ++writes === 2) {
+        armed = false;
+        advanced = true;
+        // The uncertainty marker and the new family have both committed.
+        // Simulate latency in the store acknowledgement after the second CAS.
+        f.advance(60_001);
+      }
+      return committed;
+    },
+  };
+  const f = await fixture("query", {
+    provider: { capabilities: apiPolicy },
+    session: { store },
+  });
+  const signed = await f.signIn({ resource: "https://api.test", scopes: ["read"] });
+  const request = () => new Request(origin, { headers: { cookie: signed.cookie } });
+  f.advance(30_000);
+  armed = true;
+  await expect(f.engine.token(request(), "oidc", { scopes: ["read"] })).rejects.toMatchObject({
+    code: "provider-unavailable",
+  });
+  expect(advanced).toBe(true);
+  expect(writes).toBe(2);
+  expect(f.refreshes()).toBe(1);
+  expect((await f.engine.resolve(request())).authenticated).toBe(true);
+  // The provider fixture consumes each refresh token once. This succeeds only
+  // using ROTATED_1, rather than replaying the old token or restoring uncertainty.
+  expect(await f.engine.token(request(), "oidc", { scopes: ["read"] })).toBe("RENEWED_2");
+  expect(f.refreshes()).toBe(2);
+});
+
+it("delivers a freshly acquired live token even inside the proactive cache leeway", async () => {
+  const f = await fixture("query", {
+    provider: { capabilities: apiPolicy },
+    session: { leewaySeconds: 60 },
+  });
+  const signed = await f.signIn({ resource: "https://api.test", scopes: ["read"] });
+  const request = () => new Request(origin, { headers: { cookie: signed.cookie } });
+  // The fixed 60-second token is live at exchange completion. The configured
+  // 60-second leeway requests renewal, but is not its hard delivery deadline.
+  expect(await f.engine.token(request(), "oidc", { scopes: ["read"] })).toBe("RENEWED_1");
+  expect(f.refreshes()).toBe(1);
+  expect((await f.engine.resolve(request())).authenticated).toBe(true);
+});
+
+// Auth65 carry-forward: no injected-clock advance in this lifecycle matrix.
+function observeLifecycle<T>(pending: Promise<T>) {
+  return pending.then(
+    (value) => ({ status: "fulfilled" as const, value }),
+    (error: unknown) => ({ status: "rejected" as const, error }),
+  );
+}
+
+async function boundLifecycle<T>(pending: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      pending,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error("Unexpired lifecycle operation did not settle")),
+          2000,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const lifecycleRetirements = ["logout", "new-login", "close"] as const;
+it.each(lifecycleRetirements)(
+  "settles an unexpired held callback on %s and fences its ignored late HTTP completion",
+  async (retirement) => {
+    const store = memoryAuthority(100, () => 0);
+    const f = await fixture("query", {
+      provider: { capabilities: apiPolicy },
+      session: { store },
+      ignoreCancellation: true,
+    });
+    const signed = await f.signIn({ resource: "https://api.test", scopes: ["read"] });
+    const initial = await f.engine.resolve(
+      new Request(origin, { headers: { cookie: signed.cookie } }),
+    );
+    const authorityId = initial.session!.id;
+    const clock = f.options.clock();
+    expect(initial.session!.expiresAt).toBeGreaterThan(clock);
+    const started = await boundLifecycle(
+      f.start(signed.cookie, { resource: "https://api.test", scopes: ["read"] }),
+    );
+    let release!: () => void;
+    f.delay(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+    const request = f.callback(started.location, started.cookie);
+    const outcome = observeLifecycle(f.engine.callback(request, { provider: "oidc" }));
+    let latestCookie = signed.cookie;
+    let afterRetirement: Awaited<ReturnType<typeof store.read>> | undefined;
+    try {
+      await boundLifecycle(expect.poll(() => f.exchanges(), { timeout: 1000 }).toBe(2));
+      expect(f.pendingTransports()).toHaveLength(1);
+      if (retirement === "logout") {
+        const logout = new Request(`${origin}/auth/logout`, {
+          method: "POST",
+          headers: { cookie: started.cookie },
+        });
+        const response = await boundLifecycle(f.engine.logout(logout));
+        await boundLifecycle(f.engine.finalize(logout, response));
+      } else if (retirement === "new-login") {
+        // The old HTTP handler already captured its held promise. A new login
+        // can complete against the same server without releasing that handler.
+        f.delay(Promise.resolve());
+        f.claims({ sub: "account-two" });
+        const newer = await boundLifecycle(
+          f.start(started.cookie, { resource: "https://api.test", scopes: ["read"] }),
+        );
+        const currentRequest = f.callback(newer.location, newer.cookie);
+        const response = await boundLifecycle(
+          f.engine.callback(currentRequest, { provider: "oidc" }),
+        );
+        latestCookie = cookies(
+          await boundLifecycle(f.engine.finalize(currentRequest, response)),
+          newer.cookie,
+        );
+        expect(
+          (
+            await boundLifecycle(
+              f.engine.resolve(new Request(origin, { headers: { cookie: latestCookie } })),
+            )
+          ).principal?.subject,
+        ).toBe("account-two");
+      } else {
+        await boundLifecycle(f.engine.close());
+        await boundLifecycle(f.engine.close());
+      }
+      // This assertion MUST finish while the actual provider HTTP response is
+      // still held; release() exists only in finally below.
+      const settled = await boundLifecycle(outcome);
+      expect(settled.status).toBe("rejected");
+      if (settled.status === "rejected")
+        expect(settled.error).toMatchObject({
+          name: "AbortError",
+          message: "Authentication operation was cancelled.",
+        });
+      expect(f.pendingTransports()).toHaveLength(1);
+      afterRetirement = await boundLifecycle(
+        store.read(authorityId, { signal: new AbortController().signal }),
+      );
+    } finally {
+      release();
+      f.delay(Promise.resolve());
+      await boundLifecycle(Promise.allSettled([outcome, ...f.pendingTransports()]));
+    }
+    expect(f.options.clock()).toBe(clock);
+    expect(await store.read(authorityId, { signal: new AbortController().signal })).toEqual(
+      afterRetirement,
+    );
+    expect(f.refreshes()).toBe(0);
+    if (retirement === "close") {
+      await expect(f.engine.finalize(request, new Response("late failure"))).rejects.toMatchObject({
+        code: "closed",
+      });
+      await expect(f.engine.resolve(new Request(origin))).rejects.toMatchObject({ code: "closed" });
+      await expect(
+        f.engine.token(new Request(origin), "oidc", { scopes: ["read"] }),
+      ).rejects.toMatchObject({ code: "closed" });
+      // Closing an engine is not a distributed logout. An independently owned
+      // engine using the explicit shared store still sees the prior identity.
+      const observer = createProviderSession(f.options);
+      cleanup.push(() => observer.close());
+      expect(
+        (await observer.resolve(new Request(origin, { headers: { cookie: signed.cookie } })))
+          .principal?.subject,
+      ).toBe("account-one");
+    } else {
+      const response = await f.engine.finalize(
+        request,
+        new Response("late failure", {
+          headers: { "set-cookie": "application=preserved; Path=/" },
+        }),
+      );
+      expect(
+        response.headers.getSetCookie().some((line) => line.startsWith("__Host-askr-session=")),
+      ).toBe(false);
+      expect(response.headers.getSetCookie()).toContain("application=preserved; Path=/");
+      expect(
+        (await f.engine.resolve(new Request(origin, { headers: { cookie: signed.cookie } })))
+          .authenticated,
+      ).toBe(false);
+      await expect(
+        f.engine.token(new Request(origin, { headers: { cookie: signed.cookie } }), "oidc", {
+          scopes: ["read"],
+        }),
+      ).rejects.toMatchObject({ code: "interaction-required", reason: "login" });
+      if (retirement === "new-login") {
+        const current = new Request(origin, {
+          headers: { cookie: cookies(response, latestCookie) },
+        });
+        expect((await f.engine.resolve(current)).principal?.subject).toBe("account-two");
+        expect(await f.engine.token(current, "oidc", { scopes: ["read"] })).toBe("ACCESS_CANARY");
+        expect(f.exchanges()).toBe(3);
+      }
+    }
+  },
+);
+
+it.each(lifecycleRetirements)(
+  "settles both unexpired renewal callers on %s and never commits ignored old rotation",
+  async (retirement) => {
+    const store = memoryAuthority(100, () => 0);
+    const f = await fixture("query", {
+      provider: { capabilities: apiPolicy },
+      // Trigger proactive renewal without advancing the clock or expiring the
+      // actual 60-second access token, transaction or application identity.
+      session: { store, leewaySeconds: 60 },
+      ignoreCancellation: true,
+    });
+    const signed = await f.signIn({ resource: "https://api.test", scopes: ["read"] });
+    const request = () => new Request(origin, { headers: { cookie: signed.cookie } });
+    const initial = await f.engine.resolve(request());
+    const authorityId = initial.session!.id;
+    const clock = f.options.clock();
+    expect(initial.session!.expiresAt).toBeGreaterThan(clock);
+    let release!: () => void;
+    f.delay(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+    const firstRequest = request();
+    const secondRequest = request();
+    const first = observeLifecycle(f.engine.token(firstRequest, "oidc", { scopes: ["read"] }));
+    let second: ReturnType<typeof observeLifecycle<string>> | undefined;
+    let latestCookie = signed.cookie;
+    let afterRetirement: Awaited<ReturnType<typeof store.read>> | undefined;
+    try {
+      await boundLifecycle(expect.poll(() => f.refreshes(), { timeout: 1000 }).toBe(1));
+      second = observeLifecycle(f.engine.token(secondRequest, "oidc", { scopes: ["read"] }));
+      // Existing same-key dedupe/starter-cancellation control supplies the
+      // independent joining guarantee; these callers target that identical key.
+      expect((await boundLifecycle(f.engine.resolve(secondRequest))).authenticated).toBe(true);
+      expect(f.pendingTransports()).toHaveLength(1);
+      if (retirement === "logout") {
+        const logout = new Request(`${origin}/auth/logout`, {
+          method: "POST",
+          headers: { cookie: signed.cookie },
+        });
+        const response = await boundLifecycle(f.engine.logout(logout));
+        await boundLifecycle(f.engine.finalize(logout, response));
+      } else if (retirement === "new-login") {
+        f.delay(Promise.resolve());
+        f.claims({ sub: "account-two" });
+        const newer = await boundLifecycle(
+          f.start(signed.cookie, { resource: "https://api.test", scopes: ["read"] }),
+        );
+        const currentRequest = f.callback(newer.location, newer.cookie);
+        const response = await boundLifecycle(
+          f.engine.callback(currentRequest, { provider: "oidc" }),
+        );
+        latestCookie = cookies(
+          await boundLifecycle(f.engine.finalize(currentRequest, response)),
+          newer.cookie,
+        );
+        expect(
+          (
+            await boundLifecycle(
+              f.engine.resolve(new Request(origin, { headers: { cookie: latestCookie } })),
+            )
+          ).principal?.subject,
+        ).toBe("account-two");
+      } else {
+        await boundLifecycle(f.engine.close());
+        await boundLifecycle(f.engine.close());
+      }
+      const outcomes = await boundLifecycle(Promise.all([first, second]));
+      for (const result of outcomes) {
+        expect(result.status).toBe("rejected");
+        if (result.status === "rejected")
+          expect(result.error).toMatchObject({
+            name: "AbortError",
+            message: "Authentication operation was cancelled.",
+          });
+      }
+      expect(f.refreshes()).toBe(1);
+      expect(f.refreshSignals()).toHaveLength(1);
+      expect(f.refreshSignals()[0]!.aborted).toBe(true);
+      expect(f.pendingTransports()).toHaveLength(1);
+      afterRetirement = await boundLifecycle(
+        store.read(authorityId, { signal: new AbortController().signal }),
+      );
+    } finally {
+      release();
+      f.delay(Promise.resolve());
+      await boundLifecycle(
+        Promise.allSettled([
+          first,
+          ...(second === undefined ? [] : [second]),
+          ...f.pendingTransports(),
+        ]),
+      );
+    }
+    expect(f.options.clock()).toBe(clock);
+    expect(await store.read(authorityId, { signal: new AbortController().signal })).toEqual(
+      afterRetirement,
+    );
+    expect(f.refreshes()).toBe(1);
+    if (retirement === "close") {
+      await expect(f.engine.finalize(firstRequest, new Response("late"))).rejects.toMatchObject({
+        code: "closed",
+      });
+      await expect(f.engine.finalize(secondRequest, new Response("late"))).rejects.toMatchObject({
+        code: "closed",
+      });
+      await expect(f.engine.token(request(), "oidc", { scopes: ["read"] })).rejects.toMatchObject({
+        code: "closed",
+      });
+    } else {
+      for (const oldRequest of [firstRequest, secondRequest]) {
+        const response = await f.engine.finalize(oldRequest, new Response("late"));
+        expect(
+          response.headers.getSetCookie().some((line) => line.startsWith("__Host-askr-session=")),
+        ).toBe(false);
+        latestCookie = cookies(response, latestCookie);
+      }
+      await expect(f.engine.token(request(), "oidc", { scopes: ["read"] })).rejects.toMatchObject({
+        code: "interaction-required",
+        reason: "login",
+      });
+    }
+    // A separate zero-leeway reader observes only authoritative unexpired
+    // cache state; close does not erase a caller-owned shared store.
+    const observer = createProviderSession({
+      ...f.options,
+      session: { ...f.options.session, leewaySeconds: 0 },
+    });
+    cleanup.push(() => observer.close());
+    const current = new Request(origin, { headers: { cookie: latestCookie } });
+    if (retirement === "logout") {
+      expect((await observer.resolve(current)).authenticated).toBe(false);
+      await expect(observer.token(current, "oidc", { scopes: ["read"] })).rejects.toMatchObject({
+        code: "interaction-required",
+        reason: "login",
+      });
+    } else {
+      expect((await observer.resolve(current)).principal?.subject).toBe(
+        retirement === "new-login" ? "account-two" : "account-one",
+      );
+      expect(await observer.token(current, "oidc", { scopes: ["read"] })).toBe("ACCESS_CANARY");
+      expect(f.exchanges()).toBe(retirement === "new-login" ? 2 : 1);
+    }
+    expect(f.refreshes()).toBe(1);
+  },
+);
