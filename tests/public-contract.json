@@ -1,8 +1,6 @@
 {
   "exportKeys": [
     ".",
-    "./auth0",
-    "./browser",
     "./jwt",
     "./mfa",
     "./oidc",
@@ -86,17 +84,6 @@
       "removed": []
     },
     {
-      "specifier": "@askrjs/auth/browser",
-      "values": ["BrowserOidcSessionError", "createBrowserOidcSession"],
-      "types": [
-        "BrowserOidcSession",
-        "BrowserOidcSessionErrorCode",
-        "BrowserOidcSessionOptions",
-        "BrowserOidcSessionResult"
-      ],
-      "removed": []
-    },
-    {
       "specifier": "@askrjs/auth/saml",
       "values": ["SamlValidationError", "createSamlServiceProvider"],
       "types": [
@@ -149,12 +136,6 @@
         "PasskeyRegistration"
       ],
       "removed": ["decodeBase64Url", "encodeBase64Url"]
-    },
-    {
-      "specifier": "@askrjs/auth/auth0",
-      "values": ["createAuth0Session"],
-      "types": ["Auth0SessionOptions"],
-      "removed": []
     },
     {
       "specifier": "@askrjs/auth/server",
@@ -230,6 +211,35 @@
     "dist/providers/google.js",
     "providers/apple.js",
     "src/providers/apple.ts",
-    "dist/providers/apple.js"
+    "dist/providers/apple.js",
+    "browser-types",
+    "browser-transport",
+    "src/browser.ts",
+    "src/browser-types.ts",
+    "src/browser-transport.ts",
+    "src/auth0.ts",
+    "dist/browser.js",
+    "dist/browser.d.ts",
+    "dist/browser-types.js",
+    "dist/browser-transport.js",
+    "dist/auth0.js",
+    "dist/auth0.d.ts"
+  ],
+  "retiredEntrypoints": [
+    {
+      "specifier": "@askrjs/auth/browser",
+      "values": ["BrowserOidcSessionError", "createBrowserOidcSession"],
+      "types": [
+        "BrowserOidcSession",
+        "BrowserOidcSessionErrorCode",
+        "BrowserOidcSessionOptions",
+        "BrowserOidcSessionResult"
+      ]
+    },
+    {
+      "specifier": "@askrjs/auth/auth0",
+      "values": ["createAuth0Session"],
+      "types": ["Auth0SessionOptions"]
+    }
   ]
 }

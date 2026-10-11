@@ -35,10 +35,6 @@ for (const required of [
   "dist/providers/apple.js",
   "dist/providers/apple.d.ts",
   "docs/providers-apple.md",
-  "dist/browser.js",
-  "dist/browser.d.ts",
-  "dist/auth0.js",
-  "dist/auth0.d.ts",
   "dist/saml.js",
   "dist/saml.d.ts",
   "dist/mfa.js",
@@ -48,6 +44,19 @@ for (const required of [
 ]) {
   if (!packedFiles.has(normalize(required)))
     throw new Error(`Packed artifact is missing ${required}.`);
+}
+for (const file of packRecord.files) {
+  if (
+    /^dist\/(?:browser(?:-types|-transport)?|auth0)(?:[.-]|$)/u.test(file.path) ||
+    ["docs/browser-session.md", "docs/auth0-session.md"].includes(file.path) ||
+    /^examples\/(?:browser-session|auth0-session)\//u.test(file.path)
+  )
+    throw new Error(`Packed artifact contains retired browser session file ${file.path}.`);
+  if (
+    /\.(?:js|d\.ts)$/u.test(file.path) &&
+    readFileSync(file.path, "utf8").includes("@auth0/auth0-spa-js")
+  )
+    throw new Error(`Packed artifact still references the retired Auth0 SPA SDK in ${file.path}.`);
 }
 const sourceMappingPattern = /[#@]\s*sourceMappingURL=([^\s*]+)/gu;
 
