@@ -82,6 +82,17 @@ try {
     // @ts-expect-error Google offline access is an authorization parameter, not an OIDC scope.
     const googleOffline: Entry11.GoogleProviderOptions = { ...googleOptions, identityScopes: ["openid", "offline_access"] };
     void [googleProvider, googleCache, googleRedirect, googleOffline];
+    const appleOptions: Entry12.AppleProviderOptions = { id: "apple", servicesId: "com.example.web", teamId: "TEAM123456", keyId: "KEY1234567", privateKey: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" } };
+    const appleProvider: Entry8.ProviderDefinition = Entry12.createAppleProvider(appleOptions);
+    // @ts-expect-error Apple exposes no API resource policy.
+    const appleResources: Entry12.AppleProviderOptions = { ...appleOptions, resources: [] };
+    // @ts-expect-error App callback routing belongs to the shared engine.
+    const appleRedirect: Entry12.AppleProviderOptions = { ...appleOptions, redirectUri: "https://app.test/callback" };
+    // @ts-expect-error Private keys are supplied by server code, never loaded by the preset.
+    const appleKeyPath: Entry12.AppleProviderOptions = { ...appleOptions, privateKeyPath: "key.p8" };
+    // @ts-expect-error The server secret cache has no public policy knob.
+    const appleCache: Entry12.AppleProviderOptions = { ...appleOptions, cacheTtl: 300 };
+    void [appleProvider, appleResources, appleRedirect, appleKeyPath, appleCache];
     // @ts-expect-error SDK persistence/cache configuration is deliberately not an Askr option.
     const persistent: Entry7.Auth0SessionOptions = { ...sdk, cacheLocation: "localstorage" };
     // @ts-expect-error Response formats must be explicitly selected.
@@ -228,6 +239,34 @@ try {
     cwd: consumer,
     stdio: "pipe",
   });
+  const appleSource = (await readFile("tests/provider-apple-fixture.ts", "utf8"))
+    .replaceAll('"../src/jwt"', '"@askrjs/auth/jwt"')
+    .replaceAll('"../src/server"', '"@askrjs/auth/server"');
+  const appleRuntime = ts.transpileModule(appleSource, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  }).outputText;
+  const appleModule = ts.createSourceFile(
+    "apple-fixture.mjs",
+    appleRuntime,
+    ts.ScriptTarget.ES2022,
+  );
+  assert.deepEqual(
+    appleModule.statements
+      .filter(ts.isImportDeclaration)
+      .map((node) => node.moduleSpecifier.text)
+      .sort(),
+    ["@askrjs/auth/jwt", "@askrjs/auth/server", "node:assert/strict", "node:crypto", "node:http"],
+    "Installed Apple oracle must import public entries/native modules only.",
+  );
+  await writeFile(join(consumer, "apple-fixture.mjs"), appleRuntime);
+  await writeFile(
+    join(consumer, "provider-apple-native.mjs"),
+    await readFile("tests/provider-apple-native.mjs"),
+  );
+  execFileSync(process.execPath, [join(consumer, "provider-apple-native.mjs")], {
+    cwd: consumer,
+    stdio: "pipe",
+  });
   // The adapter is opt-in: importing it without its optional SDK fails, while
   // all native/server paths and every declaration above work without that peer.
   await writeFile(
@@ -277,6 +316,7 @@ try {
       nativeAuth0SignedHttp: true,
       nativeMicrosoftSignedHttp: true,
       nativeGoogleSignedHttp: true,
+      nativeAppleSignedHttp: true,
       optionalSdkNormalInstall: "2.28.3",
     }),
   );

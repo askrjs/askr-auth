@@ -169,6 +169,16 @@ export async function exchangeProviderTokens(
         data.refresh_token.length > 65_536))
   )
     throw new ProviderSessionError("provider-unavailable");
+  if (providerPolicy(provider).tokenScopePolicy === "apple") {
+    // Apple's response has no scope field. Signed identity establishes openid separately.
+    return {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token as string | undefined,
+      expiresIn: data.expires_in,
+      scopes: [],
+      idToken: typeof data.id_token === "string" ? data.id_token : undefined,
+    };
+  }
   if (providerPolicy(provider).tokenScopePolicy === "google") {
     if (typeof data.scope !== "string") throw new ProviderSessionError("provider-unavailable");
     const granted = data.scope.split(" ").filter(Boolean);
@@ -259,6 +269,10 @@ export async function exchangeProviderTokens(
     idToken: typeof data.id_token === "string" ? data.id_token : undefined,
   };
 }
+export interface ValidatedProviderIdentity {
+  readonly principal: Principal;
+  readonly signInPrincipal?: Principal;
+}
 export async function validateProviderIdentity(
   provider: ProviderDefinition,
   idToken: string | undefined,
@@ -267,7 +281,7 @@ export async function validateProviderIdentity(
   request: typeof fetch,
   now: number,
   previousSubject?: string,
-): Promise<Principal> {
+): Promise<ValidatedProviderIdentity> {
   try {
     if (!idToken) throw new Error();
     const claimedIssuer = decodeJson(idToken.split(".")[1]!).iss;
@@ -295,10 +309,11 @@ export async function validateProviderIdentity(
         : await validateOidcRefreshIdToken(idToken, { ...validation, subject: previousSubject });
     policy.validateClaims?.(principal);
     if (typeof principal.subject !== "string" || !principal.subject) throw new Error();
-    return Object.freeze({
+    const minimal = Object.freeze({
       id: JSON.stringify([provider.issuer, principal.subject]),
       subject: principal.subject,
     });
+    return { principal: minimal, signInPrincipal: policy.signInPrincipal?.(principal, minimal) };
   } catch (error) {
     if (
       error instanceof ProviderSessionError ||

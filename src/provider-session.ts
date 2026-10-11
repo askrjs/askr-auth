@@ -55,6 +55,7 @@ interface Authority {
   nonce?: string;
   refreshToken?: string;
   refreshing?: string;
+  accountCheckedAt?: number;
   identityScopes: readonly string[];
   grants: readonly Grant[];
   pending: readonly string[];
@@ -81,6 +82,9 @@ interface LocatedAuthority {
   record: ProviderSessionRecord;
   value: Authority;
 }
+type AccountCheckResult =
+  | { readonly kind: "active"; readonly authority: LocatedAuthority }
+  | { readonly kind: "retired"; readonly authority: Authority };
 interface Issuance {
   name: string;
   line: string;
@@ -189,6 +193,7 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
   const transactions = new Map<string, AbortController>();
   const requests = new WeakMap<Request, RequestState>();
   const renewals = new Map<string, Promise<{ authority: LocatedAuthority; token: string }>>();
+  const accountChecks = new Map<string, Promise<AccountCheckResult>>();
   let closed = false;
   const live = () => {
     if (closed) throw new ProviderSessionError("closed");
@@ -432,7 +437,7 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
   }
   function interaction(
     provider: ProviderDefinition,
-    resource: string,
+    resource: string | undefined,
     scopes: readonly string[],
     reason: "login" | "consent" = "login",
   ) {
@@ -528,7 +533,7 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
     original: Authority,
     signal: AbortSignal,
     provider: ProviderDefinition,
-    resource: string,
+    resource: string | undefined,
     scopes: readonly string[],
   ) {
     live();
@@ -554,13 +559,226 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
   const usable = (grant: Grant | undefined) =>
     grant !== undefined && grant.expiresAt - leeway * 1000 > now();
 
+  const accountFresh = (authority: Authority) => {
+    const checkedAt = authority.accountCheckedAt;
+    if (!Number.isSafeInteger(checkedAt)) return false;
+    const elapsed = now() - checkedAt!;
+    return checkedAt! >= 0 && elapsed >= 0 && elapsed < 86_400_000;
+  };
+  async function checkAccount(
+    original: LocatedAuthority,
+    provider: ProviderDefinition,
+    caller: AbortSignal,
+  ): Promise<LocatedAuthority & { readonly issuance?: Issuance }> {
+    if (accountFresh(original.value)) return original;
+    const identity = identitySignal(original.value);
+    const key = JSON.stringify([
+      original.value.id,
+      original.value.epoch,
+      providerPolicy(provider).fingerprint,
+    ]);
+    let operation = accountChecks.get(key);
+    if (!operation) {
+      const signal = composed(identity);
+      const current = () =>
+        requireIdentity(original.value, signal, provider, undefined, provider.identityScopes);
+      const pending = stored<AccountCheckResult>(
+        () =>
+          store.withLock(
+            `grant:${original.value.id}:${original.value.epoch}`,
+            async () => {
+              const latest = await current();
+              if (accountFresh(latest.value)) return { kind: "active" as const, authority: latest };
+              if (!latest.value.refreshToken || latest.value.refreshing !== undefined)
+                throw interaction(provider, undefined, provider.identityScopes);
+              const transport = providerTransport(fetcher, signal, async () => {
+                await current();
+              });
+              const metadata = await waitFor(
+                providerMetadata(provider, transport, async () => {
+                  await current();
+                }),
+                signal,
+              );
+              const attempt = randomString();
+              await stored(
+                () =>
+                  store.withLock(
+                    `authority:${latest.value.id}`,
+                    async () => {
+                      const before = await current();
+                      if (
+                        before.value.refreshing !== undefined ||
+                        before.value.refreshToken !== latest.value.refreshToken
+                      )
+                        throw interaction(provider, undefined, provider.identityScopes);
+                      await commitAuthority(
+                        before,
+                        { ...before.value, refreshing: attempt },
+                        signal,
+                      );
+                    },
+                    { signal },
+                  ),
+                signal,
+              );
+              const exchangeStart = now();
+              let tokens: Awaited<ReturnType<typeof exchangeProviderTokens>>;
+              try {
+                tokens = await exchangeProviderTokens(
+                  provider,
+                  transport,
+                  metadata.token_endpoint,
+                  new URLSearchParams({
+                    grant_type: "refresh_token",
+                    refresh_token: latest.value.refreshToken,
+                  }),
+                  provider.identityScopes,
+                  exchangeStart,
+                  signal,
+                );
+              } catch (error) {
+                if (!(error instanceof InteractionRequiredError) || error.reason !== "login")
+                  throw error;
+                // Return a terminal value through EVERY stored boundary before aborting the local
+                // identity. Cleanup must not turn the verified provider failure into its own abort.
+                return stored<AccountCheckResult>(
+                  () =>
+                    store.withLock(
+                      `authority:${latest.value.id}`,
+                      async () => {
+                        const before = await current();
+                        if (before.value.refreshing !== attempt)
+                          throw interaction(provider, undefined, provider.identityScopes);
+                        const retired = await stored(
+                          () =>
+                            store.compareAndSwap(
+                              before.value.id,
+                              before.record.revision,
+                              {
+                                revision: before.record.revision + 1,
+                                expiresAt: before.record.expiresAt,
+                                retired: true,
+                                value: null,
+                              },
+                              { signal },
+                            ),
+                          signal,
+                        );
+                        if (!retired)
+                          throw interaction(provider, undefined, provider.identityScopes);
+                        return { kind: "retired" as const, authority: before.value };
+                      },
+                      { signal },
+                    ),
+                  signal,
+                );
+              }
+              await current();
+              try {
+                await waitFor(
+                  validateProviderIdentity(
+                    provider,
+                    tokens.idToken,
+                    latest.value.nonce!,
+                    metadata.jwks_uri,
+                    transport,
+                    now(),
+                    latest.value.principal!.subject!,
+                  ),
+                  signal,
+                );
+              } catch (error) {
+                checkCancellation(signal);
+                if (error instanceof ProviderSessionError && error.code === "invalid-callback")
+                  throw new ProviderSessionError("provider-unavailable");
+                throw error;
+              }
+              await current();
+              return stored<AccountCheckResult>(
+                () =>
+                  store.withLock(
+                    `authority:${latest.value.id}`,
+                    async () => {
+                      const before = await current();
+                      if (before.value.refreshing !== attempt)
+                        throw interaction(provider, undefined, provider.identityScopes);
+                      const committed = await commitAuthority(
+                        before,
+                        {
+                          ...before.value,
+                          refreshing: undefined,
+                          accountCheckedAt: exchangeStart,
+                          refreshToken: tokens.refreshToken ?? before.value.refreshToken,
+                        },
+                        signal,
+                      );
+                      return { kind: "active" as const, authority: committed.authority };
+                    },
+                    { signal },
+                  ),
+                signal,
+              );
+            },
+            { signal },
+          ),
+        signal,
+      );
+      operation = pending.then((result) => {
+        if (result.kind === "retired") retireLocal(result.authority);
+        return result;
+      });
+      accountChecks.set(key, operation);
+      const completed = operation;
+      void completed
+        .finally(() => {
+          if (accountChecks.get(key) === completed) accountChecks.delete(key);
+        })
+        .catch(() => undefined);
+    }
+    let result: AccountCheckResult;
+    try {
+      result = await waitFor(operation, caller);
+    } catch (error) {
+      checkCancellation(caller);
+      throw error;
+    }
+    checkCancellation(caller);
+    live();
+    if (result.kind === "retired") throw interaction(provider, undefined, provider.identityScopes);
+    const successSignal = composed(caller, identity);
+    const active = await requireIdentity(
+      result.authority.value,
+      successSignal,
+      provider,
+      undefined,
+      provider.identityScopes,
+    );
+    const issuance = await sessionIssuance(active.value, active.record.revision, successSignal);
+    await requireIdentity(
+      active.value,
+      successSignal,
+      provider,
+      undefined,
+      provider.identityScopes,
+    );
+    return { ...active, issuance };
+  }
+
   const engine: ProviderSession = {
     async resolve(request, resolveOptions) {
       live();
       const signal = composed(request.signal, resolveOptions?.signal);
-      const value = (await requestAuthority(request, signal))?.value;
-      if (!value?.principal) return anonymous;
-      const principal = value.principal;
+      let located = await requestAuthority(request, signal);
+      if (!located?.value.principal) return anonymous;
+      const provider = currentProvider(located.value.provider!);
+      if (provider.capabilities.renewal === "account-check") {
+        const checked = await checkAccount(located, provider, signal);
+        if (checked.issuance !== undefined) stage(request, checked.issuance);
+        located = checked;
+      }
+      const value = located.value;
+      const principal = value.principal!;
       return Object.freeze({
         authenticated: true,
         principal: Object.freeze({ ...principal }),
@@ -812,6 +1030,7 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
           (fields.has("iss") && fields.get("iss") !== provider.issuer)
         )
           throw new ProviderSessionError("invalid-callback");
+        const profileHint = providerPolicy(provider).profileHint?.(fields.get("user"));
         const transport = providerTransport(fetcher, signal, current);
         const metadata = await waitFor(providerMetadata(provider, transport, current), signal);
         await current();
@@ -836,7 +1055,7 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
           transaction.resource,
         );
         await current();
-        const principal = await waitFor(
+        const identityResult = await waitFor(
           validateProviderIdentity(
             provider,
             tokens.idToken,
@@ -847,11 +1066,19 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
           ),
           signal,
         );
+        const principal = identityResult.principal;
         await current();
         if (onSignIn) {
           try {
             await waitFor(
-              Promise.resolve(onSignIn({ provider: provider.id, principal, signal })),
+              Promise.resolve(
+                onSignIn({
+                  provider: provider.id,
+                  principal: identityResult.signInPrincipal ?? principal,
+                  signal,
+                  ...(profileHint === undefined ? {} : { profileHint }),
+                }),
+              ),
               signal,
             );
           } catch (error) {
@@ -892,6 +1119,9 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
                   fingerprint: providerPolicy(provider).fingerprint,
                   principal,
                   nonce: transaction.nonce,
+                  ...(provider.capabilities.renewal === "account-check"
+                    ? { accountCheckedAt: exchangeStart }
+                    : {}),
                   expiresAt: sameAccount ? previous.value.expiresAt : exchangeStart + maxAge * 1000,
                   refreshToken:
                     tokens.refreshToken ??
@@ -900,7 +1130,8 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
                       : undefined),
                   identityScopes:
                     providerPolicy(provider).tokenScopePolicy === "microsoft" ||
-                    providerPolicy(provider).tokenScopePolicy === "google"
+                    providerPolicy(provider).tokenScopePolicy === "google" ||
+                    providerPolicy(provider).tokenScopePolicy === "apple"
                       ? [...new Set(["openid", ...tokens.scopes])].sort()
                       : tokens.scopes.filter(
                           (scope) =>
@@ -1298,6 +1529,7 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
       identities.clear();
       transactions.clear();
       renewals.clear();
+      accountChecks.clear();
     },
   };
   return Object.freeze(engine);
