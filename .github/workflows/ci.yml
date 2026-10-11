@@ -60,6 +60,103 @@ jobs:
           npm run test:publint
           npm run pack:check
           npm run test:packed
+      - name: Create normal package archive
+        id: normal-pack
+        shell: bash
+        env:
+          PACK_DIR: ${{ runner.temp }}/askr-auth-pack-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          PACK_REQUESTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          mkdir -p "$PACK_DIR"
+          status=0
+          npm pack --json --pack-destination "$PACK_DIR" > "$PACK_DIR/npm-pack.stdout.log" 2> "$PACK_DIR/npm-pack.stderr.log" || status=$?
+          PACK_EXIT_CODE="$status" node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { createHash } from "node:crypto";
+          import { execFileSync } from "node:child_process";
+          import { readFileSync, writeFileSync } from "node:fs";
+          import { basename, join } from "node:path";
+          import { readPackRecord } from "./tests/pack-result.js";
+
+          const directory = process.env.PACK_DIR;
+          const metadata = {
+            requestedHead: process.env.PACK_REQUESTED_HEAD,
+            checkoutCommit: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+            checkoutTree: execFileSync("git", ["rev-parse", "HEAD^{tree}"], { encoding: "utf8" }).trim(),
+            githubSha: process.env.GITHUB_SHA,
+            runId: process.env.GITHUB_RUN_ID,
+            runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+            runnerOs: process.env.RUNNER_OS,
+            node: process.version,
+            npm: execFileSync("npm --version", { encoding: "utf8", shell: true }).trim(),
+            packExitCode: Number(process.env.PACK_EXIT_CODE),
+            ignoreScripts: execFileSync("npm config get ignore-scripts", { encoding: "utf8", shell: true }).trim(),
+            prepackActive: false,
+          };
+          try {
+            assert.equal(metadata.packExitCode, 0, "Ordinary npm pack must succeed.");
+            assert.equal(metadata.ignoreScripts, "false", "npm lifecycle scripts must be enabled.");
+            const manifest = JSON.parse(readFileSync("package.json", "utf8"));
+            assert.equal(manifest.scripts.prepack, "npm run build");
+            const stdout = readFileSync(join(directory, "npm-pack.stdout.log"), "utf8");
+            const stderr = readFileSync(join(directory, "npm-pack.stderr.log"), "utf8");
+            const phases = [manifest.name + "@" + manifest.version + " prepack", "npm run build", manifest.name + "@" + manifest.version + " build", "vp pack"];
+            const transcripts = [
+              { stream: "stdout", source: stdout, prefix: "> " },
+              { stream: "stderr", source: stderr, prefix: "npm notice run " },
+              { stream: "stderr", source: stderr, prefix: "> " },
+            ];
+            for (const transcript of transcripts) {
+              const lines = transcript.source.split(/\r?\n/u).map((line) => line.trim());
+              let previous = -1;
+              const indices = phases.map((phase) => {
+                const index = lines.findIndex((line, position) => position > previous && line === transcript.prefix + phase);
+                previous = index < 0 ? lines.length : index;
+                return index;
+              });
+              if (indices.every((index) => index >= 0)) {
+                metadata.lifecycleEvidence = { stream: transcript.stream, lines: phases.map((phase) => transcript.prefix + phase), indices };
+                break;
+              }
+            }
+            assert.ok(metadata.lifecycleEvidence, "Captured npm logs must prove prepack → build → vp pack ran in order.");
+            assert.match(stdout, /Build start/u, "Retain actual Vite+ build output from prepack.");
+            metadata.prepackActive = true;
+            const candidates = [];
+            for (const match of stdout.matchAll(/^[{\[]/gm)) {
+              try { candidates.push(JSON.parse(stdout.slice(match.index))); } catch {}
+            }
+            assert.equal(candidates.length, 1, "Expected one complete npm JSON suffix after lifecycle output.");
+            const record = readPackRecord(candidates[0]);
+            assert.equal(record.name, manifest.name);
+            assert.equal(record.version, manifest.version);
+            assert.equal(record.filename, basename(record.filename));
+            assert.ok(record.filename.endsWith(".tgz"));
+            const archive = readFileSync(join(directory, record.filename));
+            assert.equal(record.size, archive.length, "npm archive size must match the retained bytes.");
+            const sha256 = createHash("sha256").update(archive).digest("hex");
+            const sha512 = "sha512-" + createHash("sha512").update(archive).digest("base64");
+            assert.equal(record.integrity, sha512);
+            assert.equal(record.shasum, createHash("sha1").update(archive).digest("hex"));
+            metadata.package = { record, sha256, sha512, size: archive.length };
+          } catch (error) {
+            metadata.error = { name: error.name, message: error.message };
+            process.exitCode = 1;
+          } finally {
+            writeFileSync(join(directory, "normal-pack-metadata.json"), JSON.stringify(metadata, null, 2) + "\n");
+          }
+          NODE
+          exit "$status"
+
       - name: Coverage evidence
         if: runner.os == 'Linux'
         run: npm run test:coverage
+
+      - name: Upload normal package archive and evidence
+        if: ${{ always() && steps.normal-pack.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: auth-normal-pack-${{ matrix.os }}-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/askr-auth-pack-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}/
+          if-no-files-found: error
+          retention-days: 7
