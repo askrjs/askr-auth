@@ -11,7 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking changes
 
-- Remove ten JWT/OIDC, CBOR/COSE and browser encoding implementation names from public entrypoints. See [every removal and replacement](docs/0.5.0-api.md). Keep all seven provider/client entrypoints and the public `CoseAlgorithm` credential contract.
+- Remove ten JWT/OIDC, CBOR/COSE and browser encoding implementation names from public entrypoints. See [every removal and replacement](docs/0.5.0-api.md). Keep the low-level OIDC/passkey entries and the public `CoseAlgorithm` credential contract; the separate browser-session retirement is described below.
+
+- Remove `@askrjs/auth/browser` and withdraw the develop-only `@askrjs/auth/auth0` SDK adapter, their browser-held session types/implementations, private SPA examples and optional Auth0 SPA SDK dependency. Migrate application sign-in to Server provider auth plus Core session binding; retain `/oidc`, `/webauthn-client` and native `/providers/auth0`. See the [breaking migration](docs/0.5.0-api.md#browser-session-migration).
 
 ### Added
 
@@ -20,8 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Shared server provider-session engine with one-time callback authority, sealed sessions, refresh-family serialization, cancellation and stale-response fencing.
 - Native Microsoft Entra ID preset at `@askrjs/auth/providers/microsoft`, with exact single-tenant issuer checks, explicit qualified API scopes, confidential rotating renewal and provider logout. See [server setup](docs/providers-microsoft.md); live-provider qualification remains pending.
 - Native Auth0 preset at `@askrjs/auth/providers/auth0`, including explicit API audiences, signed organization checks, rotating refresh grants, OIDC logout and server-side revocation. See [server setup](docs/providers-auth0.md); live-provider qualification remains pending.
-- Optional `@askrjs/auth/auth0` adapter using the official SDK peer with memory-only tokens, SDK-owned renewal and guarded local lifetime; includes a framework-neutral signed-provider example. See [SDK validation and ownership limits](docs/auth0-session.md).
-- Bounded native provider authorization parameters and explicitly selected Auth0 nested web-message format, retaining native origin/source/state and signature checks.
+- Bounded native OIDC provider authorization parameters, retaining exact callback state/nonce and signature checks.
 - Installed package contract checks under TypeScript 6 and 7, and Chromium/Firefox/WebKit browser qualification.
 - Real signing-key rotation, clock equality/failure/recovery, signed WebAuthn mismatch and TOTP period/replay-ownership probes.
 
@@ -31,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reject invalid SAML clocks, time policies and request lifetimes before returning or consuming authentication state.
 - Reject invalid TOTP timestamps and skip drift counters outside the non-negative safe integer range.
 - Bind an explicit OIDC authorized party to the configured client even for a single audience, and reject additional audiences without configured trust.
-- Use real cross-origin frame messages in the browser correlation test and dispatch npm artifact checks through Node on Windows.
+- Dispatch npm artifact checks through Node on Windows.
 
 ### Development
 

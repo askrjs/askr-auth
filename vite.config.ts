@@ -11,8 +11,6 @@ export default defineConfig({
       "providers/microsoft": "src/providers/microsoft.ts",
       "providers/google": "src/providers/google.ts",
       "providers/apple": "src/providers/apple.ts",
-      browser: "src/browser.ts",
-      auth0: "src/auth0.ts",
       saml: "src/saml.ts",
       mfa: "src/mfa.ts",
       "webauthn-client": "src/webauthn-client.ts",
@@ -23,7 +21,7 @@ export default defineConfig({
     dts: true,
     sourcemap: "hidden",
     deps: {
-      neverBundle: [/^node:/, /^@auth0\/auth0-spa-js$/],
+      neverBundle: [/^node:/],
     },
   },
 });

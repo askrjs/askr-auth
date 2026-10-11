@@ -34,8 +34,6 @@
     "docs/server-session-contract.md",
     "docs/providers-auth0.md",
     "docs/providers-microsoft.md",
-    "docs/auth0-session.md",
-    "docs/browser-session.md",
     "docs/providers-google.md",
     "docs/providers-apple.md"
   ],
@@ -63,10 +61,6 @@
       "types": "./dist/providers/auth0.d.ts",
       "import": "./dist/providers/auth0.js"
     },
-    "./browser": {
-      "types": "./dist/browser.d.ts",
-      "import": "./dist/browser.js"
-    },
     "./saml": {
       "types": "./dist/saml.d.ts",
       "import": "./dist/saml.js"
@@ -80,10 +74,6 @@
       "import": "./dist/webauthn-client.js"
     },
     "./package.json": "./package.json",
-    "./auth0": {
-      "types": "./dist/auth0.d.ts",
-      "import": "./dist/auth0.js"
-    },
     "./providers/microsoft": {
       "types": "./dist/providers/microsoft.d.ts",
       "import": "./dist/providers/microsoft.js"
@@ -122,7 +112,6 @@
     "xml-encryption": "6.0.1"
   },
   "devDependencies": {
-    "@auth0/auth0-spa-js": "2.28.3",
     "@playwright/test": "1.63.0",
     "@types/node": "^26.3.0",
     "@typescript/typescript6": "npm:typescript@6.0.2",
@@ -131,14 +120,6 @@
     "typescript": "7.0.2",
     "vite-plus": "^0.3.1",
     "vitest": "^4.1.11"
-  },
-  "peerDependencies": {
-    "@auth0/auth0-spa-js": "^2.28.3"
-  },
-  "peerDependenciesMeta": {
-    "@auth0/auth0-spa-js": {
-      "optional": true
-    }
   },
   "engines": {
     "node": ">=24.0.0"

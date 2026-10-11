@@ -3,19 +3,22 @@
 [![CI](https://github.com/askrjs/askr-auth/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/askrjs/askr-auth/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/%40askrjs%2Fauth.svg)](https://www.npmjs.com/package/@askrjs/auth)
 
-Framework-owned, domain-neutral authentication primitives for Askr. Server use requires Node.js 24 or newer; browser entrypoints use Web Crypto and Fetch.
+Framework-owned, domain-neutral authentication primitives for Askr. Server sessions require Node.js 24 or newer. The low-level OIDC and passkey client entries retain their explicit Web Crypto/Fetch or Credentials API boundaries.
 
 ## Feature matrix
 
-| Entry                  | Owns                                                                                                | Does not own                                                     |
-| ---------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `@askrjs/auth`         | `Principal`, auth contexts and requirements, bearer/cookie/session request resolution               | Users, organizations, credential storage, password hashing       |
-| `@askrjs/auth/jwt`     | RS256/ES256 issuance and validation, claims, JWKS rollover                                          | Token persistence or revocation lists                            |
-| `@askrjs/auth/oidc`    | Discovery, authorization-code PKCE, callback correlation, verified ID-token-to-`Principal` exchange | Provider UI, account linking, refresh-token storage              |
-| `@askrjs/auth/browser` | Optional browser session, redirect transactions, memory-only tokens, shared expiry renewal          | Provider logout, application identity/policy, persistent tokens  |
-| `@askrjs/auth/auth0`   | Optional official Auth0 SDK adaptation to the browser session contract                              | Native JOSE validation, provider logout, durable users/policy    |
-| `@askrjs/auth/saml`    | SP metadata and requests, signed/encrypted response validation, request correlation                 | IdP operation, SLO, IdP-initiated SAML, external CA trust policy |
-| `@askrjs/auth/mfa`     | TOTP and WebAuthn registration/authentication verification                                          | Credential storage, recovery policy, enrollment UI               |
+| Entry                              | Owns                                                                                                | Does not own                                                     |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `@askrjs/auth`                     | `Principal`, auth contexts and requirements, bearer/cookie/session request resolution               | Users, organizations, credential storage, password hashing       |
+| `@askrjs/auth/jwt`                 | RS256/ES256 issuance and validation, claims, JWKS rollover                                          | Token persistence or revocation lists                            |
+| `@askrjs/auth/oidc`                | Discovery, authorization-code PKCE, callback correlation, verified ID-token-to-`Principal` exchange | Provider UI, account linking, refresh-token storage              |
+| `@askrjs/auth/server`              | Server-owned provider transactions, sealed session cookies, refresh families and application hooks  | Application users/policy and HTTP adapter ownership              |
+| `@askrjs/auth/providers/auth0`     | Native Auth0 provider policy and API audiences                                                      | Browser SDKs and application routes                              |
+| `@askrjs/auth/providers/microsoft` | Tenant-bound Microsoft provider and explicit API permissions                                        | Multi-tenant inference and application routes                    |
+| `@askrjs/auth/providers/google`    | Google provider, hosted-domain policy and explicit API permissions                                  | Workspace administration and application routes                  |
+| `@askrjs/auth/providers/apple`     | Apple web sign-in and daily account checks                                                          | API access-token grants and application routes                   |
+| `@askrjs/auth/saml`                | SP metadata and requests, signed/encrypted response validation, request correlation                 | IdP operation, SLO, IdP-initiated SAML, external CA trust policy |
+| `@askrjs/auth/mfa`                 | TOTP and WebAuthn registration/authentication verification                                          | Credential storage, recovery policy, enrollment UI               |
 
 Replay prevention stays with the application’s durable storage boundary. SAML requires atomic
 `requestStore.consume()`. TOTP returns the accepted counter so it can be atomically marked used.
@@ -38,12 +41,10 @@ returning `{ tokens, principal }`. ID-token audiences must identify only this cl
 The OIDC entrypoint also runs in browsers with Web Crypto, Fetch, and UTF-8
 encoding support. JWT decoding uses browser-native bytes and needs no Node
 `Buffer` polyfill. Browser clients omit `clientSecret`; retain the authorization
-request for callback correlation. The optional
-[browser session layer](docs/browser-session.md) owns redirect correlation and
-expiry renewal while applications retain navigation, provider logout, and policy.
-See the [standalone native SPA](examples/browser-session/README.md) or the
-[optional Auth0 SDK adapter](docs/auth0-session.md) and its
-[framework-neutral SPA](examples/auth0-session/README.md).
+request for callback correlation. This entry is a low-level protocol primitive;
+it does not replace server-owned application sign-in or retain session tokens in
+the browser. For application sessions use the [server contract](docs/server-session-contract.md)
+and the [0.5 migration](docs/0.5.0-api.md#browser-session-migration).
 
 ```ts
 import { createOidcClient } from "@askrjs/auth/oidc";
@@ -52,6 +53,23 @@ const client = createOidcClient({ issuer, clientId, clientSecret, redirectUri })
 const request = await client.createAuthorizationRequest();
 const result = await client.exchangeCode({ code: callback.code, state: callback.state, request });
 ```
+
+## Provider application sessions
+
+Configure the shared `createProviderSession` engine from `@askrjs/auth/server`
+with one or more native providers, then bind it to the provider-auth mode in
+`@askrjs/server`. The server owns authorization/callback transport, sealed cookies,
+refresh tokens and per-resource token grants. `createSessionAuth` from
+`@askrjs/askr/router` binds the public session snapshot to an SSR or SPA application;
+provider tokens and client secrets stay server-side. See the committed
+[ownership/API contract](docs/server-session-contract.md) and setup for
+[Auth0](docs/providers-auth0.md), [Microsoft](docs/providers-microsoft.md),
+[Google](docs/providers-google.md) or [Apple](docs/providers-apple.md).
+
+`@askrjs/auth/browser` and the develop-only `@askrjs/auth/auth0` SDK adapter
+are removed in 0.5. There is no replacement browser-held session/SDK path.
+The published 0.4.2 browser lifecycle requires the explicit
+[server-session migration](docs/0.5.0-api.md#browser-session-migration).
 
 ## MFA
 
