@@ -55,6 +55,15 @@ try {
     const oidc: Entry2.OidcClientOptions = { issuer: 'https://issuer.test', clientId: 'client', redirectUri: 'https://app.test/callback' };
     const browser: Entry3.BrowserOidcSessionOptions = { ...oidc, authorizationParams: { audience: "https://api.test" }, silent: { responseFormat: "auth0" } };
     const sdk: Entry7.Auth0SessionOptions = { domain: "tenant.auth0.com", clientId: "client", redirectUri: "https://app.test/callback" };
+    const nativeOptions: Entry9.Auth0ProviderOptions = { id: "auth0", domain: "tenant.auth0.com", clientId: "client", clientSecret: "secret", organization: "org_expected", organizationName: "acme", resources: [{ resource: "https://api.test", scopes: ["read:records"] }] };
+    const nativeProvider: Entry8.ProviderDefinition = Entry9.createAuth0Provider(nativeOptions);
+    // @ts-expect-error Browser SDK cache options do not configure the native server preset.
+    const nativeCache: Entry9.Auth0ProviderOptions = { ...nativeOptions, cacheLocation: "localstorage" };
+    // @ts-expect-error App callback routing belongs to the shared engine, not the preset.
+    const nativeRedirect: Entry9.Auth0ProviderOptions = { ...nativeOptions, redirectUri: "https://app.test/callback" };
+    // @ts-expect-error API permission scopes belong to an explicit resource policy.
+    const nativeScopes: Entry9.Auth0ProviderOptions = { ...nativeOptions, identityScopes: ["read:records"] };
+    void [nativeProvider, nativeCache, nativeRedirect, nativeScopes];
     // @ts-expect-error SDK persistence/cache configuration is deliberately not an Askr option.
     const persistent: Entry7.Auth0SessionOptions = { ...sdk, cacheLocation: "localstorage" };
     // @ts-expect-error Response formats must be explicitly selected.
@@ -155,6 +164,36 @@ try {
   `,
   );
   execFileSync(process.execPath, [join(consumer, "runtime.mjs")], { cwd: consumer, stdio: "pipe" });
+  // Reuse the owned HTTP provider with public installed entries only. PKCE is
+  // verified by a native SHA-256 oracle; no private implementation is copied.
+  const presetSource = (await readFile("tests/provider-preset-fixture.ts", "utf8"))
+    .replaceAll('"../src/jwt"', '"@askrjs/auth/jwt"')
+    .replaceAll('"../src/server"', '"@askrjs/auth/server"');
+  const presetRuntime = ts.transpileModule(presetSource, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  }).outputText;
+  const presetModule = ts.createSourceFile(
+    "preset-fixture.mjs",
+    presetRuntime,
+    ts.ScriptTarget.ES2022,
+  );
+  assert.deepEqual(
+    presetModule.statements
+      .filter(ts.isImportDeclaration)
+      .map((node) => node.moduleSpecifier.text)
+      .sort(),
+    ["@askrjs/auth/jwt", "@askrjs/auth/server", "node:assert/strict", "node:crypto", "node:http"],
+    "Installed HTTP fixture must import only public package entries and native Node modules.",
+  );
+  await writeFile(join(consumer, "preset-fixture.mjs"), presetRuntime);
+  await writeFile(
+    join(consumer, "provider-auth0-native.mjs"),
+    await readFile("tests/provider-auth0-native.mjs"),
+  );
+  execFileSync(process.execPath, [join(consumer, "provider-auth0-native.mjs")], {
+    cwd: consumer,
+    stdio: "pipe",
+  });
   // The adapter is opt-in: importing it without its optional SDK fails, while
   // all native/server paths and every declaration above work without that peer.
   await writeFile(
@@ -201,6 +240,7 @@ try {
       compilers,
       normalInstall: true,
       nativeSdkAbsent: true,
+      nativeAuth0SignedHttp: true,
       optionalSdkNormalInstall: "2.28.3",
     }),
   );
