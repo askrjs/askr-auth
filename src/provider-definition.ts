@@ -15,7 +15,7 @@ export interface ProviderPolicy {
   readonly discoveryRevocation: boolean;
   readonly authorizationResourceParameter: string | null;
   /** Preset-only: Microsoft API response permissions are independent of validated OIDC identity. */
-  readonly tokenScopePolicy?: "microsoft";
+  readonly tokenScopePolicy?: "microsoft" | "google";
   readonly validateClaims?: (claims: Principal) => void;
   readonly fingerprint: string;
 }

@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Native Google server preset at `@askrjs/auth/providers/google`, with signed hosted-domain checks, explicit API permissions, offline consent recovery and server-owned revocation. See [server setup](docs/providers-google.md); live-provider qualification remains pending.
 - Shared server provider-session engine with one-time callback authority, sealed sessions, refresh-family serialization, cancellation and stale-response fencing.
 - Native Microsoft Entra ID preset at `@askrjs/auth/providers/microsoft`, with exact single-tenant issuer checks, explicit qualified API scopes, confidential rotating renewal and provider logout. See [server setup](docs/providers-microsoft.md); live-provider qualification remains pending.
 - Native Auth0 preset at `@askrjs/auth/providers/auth0`, including explicit API audiences, signed organization checks, rotating refresh grants, OIDC logout and server-side revocation. See [server setup](docs/providers-auth0.md); live-provider qualification remains pending.

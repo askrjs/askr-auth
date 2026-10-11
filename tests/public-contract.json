@@ -8,6 +8,7 @@
     "./oidc",
     "./package.json",
     "./providers/auth0",
+    "./providers/google",
     "./providers/microsoft",
     "./saml",
     "./server",
@@ -189,6 +190,12 @@
       "values": ["createMicrosoftProvider"],
       "types": ["MicrosoftProviderOptions"],
       "removed": []
+    },
+    {
+      "specifier": "@askrjs/auth/providers/google",
+      "values": ["createGoogleProvider"],
+      "types": ["GoogleProviderOptions"],
+      "removed": []
     }
   ],
   "privateSubpaths": [
@@ -210,6 +217,9 @@
     "dist/cbor.js",
     "providers/microsoft.js",
     "src/providers/microsoft.ts",
-    "dist/providers/microsoft.js"
+    "dist/providers/microsoft.js",
+    "providers/google.js",
+    "src/providers/google.ts",
+    "dist/providers/google.js"
   ]
 }

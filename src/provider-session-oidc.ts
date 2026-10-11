@@ -169,6 +169,39 @@ export async function exchangeProviderTokens(
         data.refresh_token.length > 65_536))
   )
     throw new ProviderSessionError("provider-unavailable");
+  if (providerPolicy(provider).tokenScopePolicy === "google") {
+    if (typeof data.scope !== "string") throw new ProviderSessionError("provider-unavailable");
+    const granted = data.scope.split(" ").filter(Boolean);
+    const target = provider.capabilities.resources.find(
+      (candidate) => candidate.resource === resource,
+    );
+    const required =
+      resource === undefined ? [] : scopes.filter((scope) => target?.scopes.includes(scope));
+    if (!required.every((scope) => granted.includes(scope)))
+      throw new InteractionRequiredError({
+        provider: provider.id,
+        reason: "consent",
+        resource,
+        scopes: required,
+      });
+    const identity = new Set<string>();
+    for (const scope of granted) {
+      const normalized =
+        scope === "https://www.googleapis.com/auth/userinfo.profile"
+          ? "profile"
+          : scope === "https://www.googleapis.com/auth/userinfo.email"
+            ? "email"
+            : scope;
+      if (provider.identityScopes.includes(normalized)) identity.add(normalized);
+    }
+    return {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token as string | undefined,
+      expiresIn: data.expires_in,
+      scopes: [...identity].sort(),
+      idToken: typeof data.id_token === "string" ? data.id_token : undefined,
+    };
+  }
   if (providerPolicy(provider).tokenScopePolicy === "microsoft") {
     const target = provider.capabilities.resources.find((entry) => entry.resource === resource);
     const required = target ? scopes.filter((scope) => target.scopes.includes(scope)) : [];

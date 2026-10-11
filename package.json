@@ -35,7 +35,8 @@
     "docs/providers-auth0.md",
     "docs/providers-microsoft.md",
     "docs/auth0-session.md",
-    "docs/browser-session.md"
+    "docs/browser-session.md",
+    "docs/providers-google.md"
   ],
   "type": "module",
   "main": "./dist/index.js",
@@ -85,6 +86,10 @@
     "./providers/microsoft": {
       "types": "./dist/providers/microsoft.d.ts",
       "import": "./dist/providers/microsoft.js"
+    },
+    "./providers/google": {
+      "types": "./dist/providers/google.d.ts",
+      "import": "./dist/providers/google.js"
     }
   },
   "publishConfig": {
