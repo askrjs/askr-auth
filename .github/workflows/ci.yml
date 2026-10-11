@@ -104,6 +104,7 @@ jobs:
             const transcripts = [
               { stream: "stdout", source: stdout, prefix: "> " },
               { stream: "stderr", source: stderr, prefix: "npm notice run " },
+              { stream: "stderr", source: stderr, prefix: "> " },
             ];
             for (const transcript of transcripts) {
               const lines = transcript.source.split(/\r?\n/u).map((line) => line.trim());
