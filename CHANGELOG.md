@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Shared server provider-session engine with one-time callback authority, sealed sessions, refresh-family serialization, cancellation and stale-response fencing.
+- Native Microsoft Entra ID preset at `@askrjs/auth/providers/microsoft`, with exact single-tenant issuer checks, explicit qualified API scopes, confidential rotating renewal and provider logout. See [server setup](docs/providers-microsoft.md); live-provider qualification remains pending.
 - Native Auth0 preset at `@askrjs/auth/providers/auth0`, including explicit API audiences, signed organization checks, rotating refresh grants, OIDC logout and server-side revocation. See [server setup](docs/providers-auth0.md); live-provider qualification remains pending.
 - Optional `@askrjs/auth/auth0` adapter using the official SDK peer with memory-only tokens, SDK-owned renewal and guarded local lifetime; includes a framework-neutral signed-provider example. See [SDK validation and ownership limits](docs/auth0-session.md).
 - Bounded native provider authorization parameters and explicitly selected Auth0 nested web-message format, retaining native origin/source/state and signature checks.

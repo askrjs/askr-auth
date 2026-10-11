@@ -55,13 +55,15 @@ export async function presetFixture(
     jwks: string;
     logout?: string;
     revocation?: string;
-    resourceParameter?: string;
+    resourceParameter?: string | null;
+    responseScopes?: (requested: string) => unknown;
   },
 ) {
   let now = 1_800_000_000_000;
   let claims: Record<string, unknown> = {};
   let discoveryIssuer = provider.issuer;
   let tokenIssuer = provider.issuer;
+  let responseScopes = options.responseScopes;
   let exchanges = 0;
   let refreshes = 0;
   const requests: { url: string; method: string; fields: URLSearchParams }[] = [];
@@ -116,7 +118,10 @@ export async function presetFixture(
           nonce: url.searchParams.get("nonce")!,
           challenge: url.searchParams.get("code_challenge")!,
           scopes: url.searchParams.get("scope")!,
-          resource: url.searchParams.get(options.resourceParameter ?? "resource") ?? "identity",
+          resource:
+            options.resourceParameter === null
+              ? "identity"
+              : (url.searchParams.get(options.resourceParameter ?? "resource") ?? "identity"),
         });
         const callback = new URL(url.searchParams.get("redirect_uri")!);
         callback.searchParams.set("code", code);
@@ -153,7 +158,7 @@ export async function presetFixture(
             refresh_token: rotated,
             expires_in: 60,
             token_type: "Bearer",
-            scope: fields.get("scope"),
+            scope: responseScopes ? responseScopes(fields.get("scope") ?? "") : fields.get("scope"),
           });
         }
         exchanges++;
@@ -181,7 +186,7 @@ export async function presetFixture(
           refresh_token: refresh,
           expires_in: 60,
           token_type: "Bearer",
-          scope: stored.scopes,
+          scope: responseScopes ? responseScopes(stored.scopes) : stored.scopes,
           id_token: await signer.sign({
             claims: {
               iss: tokenIssuer,
@@ -283,6 +288,9 @@ export async function presetFixture(
       const request = appRequest(cookie, "/auth/logout");
       const response = await engine.finalize(request, await engine.logout(request, options));
       return { response, cookie: responseCookies(response, cookie) };
+    },
+    setResponseScopes(value: (requested: string) => unknown) {
+      responseScopes = value;
     },
     setClaims(value: Record<string, unknown>) {
       claims = value;

@@ -169,6 +169,42 @@ export async function exchangeProviderTokens(
         data.refresh_token.length > 65_536))
   )
     throw new ProviderSessionError("provider-unavailable");
+  if (providerPolicy(provider).tokenScopePolicy === "microsoft") {
+    const target = provider.capabilities.resources.find((entry) => entry.resource === resource);
+    const required = target ? scopes.filter((scope) => target.scopes.includes(scope)) : [];
+    const omitted = !Object.hasOwn(data, "scope");
+    if (!omitted && typeof data.scope !== "string")
+      throw new ProviderSessionError("provider-unavailable");
+    const granted = typeof data.scope === "string" ? data.scope.split(" ").filter(Boolean) : [];
+    const permits = (permission: string) => {
+      if (resource !== "https://graph.microsoft.com") return granted.includes(permission);
+      const prefix = "https://graph.microsoft.com/";
+      const requiredSuffix = permission.slice(prefix.length).toLowerCase();
+      return granted.some((scope) => {
+        const suffix = scope.startsWith(prefix) ? scope.slice(prefix.length) : scope;
+        // Fold only an ASCII Graph permission suffix, never a foreign URL/prefix.
+        return /^[A-Za-z0-9._-]+$/u.test(suffix) && suffix.toLowerCase() === requiredSuffix;
+      });
+    };
+    // Microsoft's absent scope property means the exact current exchange request.
+    // It never authorizes an earlier/broader grant or an identity/offline snapshot scope.
+    if (!omitted && !required.every(permits))
+      throw new InteractionRequiredError({
+        provider: provider.id,
+        reason: "consent",
+        resource,
+        scopes: required,
+      });
+    return {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token as string | undefined,
+      expiresIn: data.expires_in,
+      scopes: granted.filter(
+        (scope) => scope !== "offline_access" && provider.identityScopes.includes(scope),
+      ),
+      idToken: typeof data.id_token === "string" ? data.id_token : undefined,
+    };
+  }
   const granted =
     data.scope === undefined
       ? scopes

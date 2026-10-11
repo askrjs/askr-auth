@@ -33,6 +33,7 @@
     "docs/0.5.0-hardening.md",
     "docs/server-session-contract.md",
     "docs/providers-auth0.md",
+    "docs/providers-microsoft.md",
     "docs/auth0-session.md",
     "docs/browser-session.md"
   ],
@@ -80,6 +81,10 @@
     "./auth0": {
       "types": "./dist/auth0.d.ts",
       "import": "./dist/auth0.js"
+    },
+    "./providers/microsoft": {
+      "types": "./dist/providers/microsoft.d.ts",
+      "import": "./dist/providers/microsoft.js"
     }
   },
   "publishConfig": {
