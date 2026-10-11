@@ -16,7 +16,9 @@ export function readPackRecord(result) {
     record === null ||
     typeof record !== "object" ||
     !Array.isArray(record.files) ||
-    !record.files.every((file) => file !== null && typeof file === "object" && typeof file.path === "string")
+    !record.files.every(
+      (file) => file !== null && typeof file === "object" && typeof file.path === "string",
+    )
   ) {
     throw new Error("npm pack returned an invalid artifact record.");
   }

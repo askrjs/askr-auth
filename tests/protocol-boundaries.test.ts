@@ -1,5 +1,5 @@
 import { generateKeyPairSync, createHmac, createPrivateKey, sign } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { createAuth } from "../src";
 import { createJwtSigner, createJwtValidator, issueTimedJwt } from "../src/jwt";
 import { verifyTotpCode, verifyWebAuthnAuthentication } from "../src/mfa";

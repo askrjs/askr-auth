@@ -420,6 +420,15 @@ test("retired SDK redirect preparation cannot overwrite a newer login transactio
 test("standalone SDK SPA normally installs, navigates, restores, renews and logs out", async ({
   page,
 }) => {
+  const installed = JSON.parse(
+    await readFile(join(consumer, "node_modules/@askrjs/auth/package.json"), "utf8"),
+  );
+  const example = JSON.parse(
+    await readFile(new URL("../../examples/auth0-session/package.json", import.meta.url), "utf8"),
+  );
+  expect(example.dependencies["@askrjs/auth"]).toBe(
+    `file:../../askrjs-auth-${installed.version}.tgz`,
+  );
   for (const file of ["server.mjs", "index.html", "localhost-key.pem", "localhost-cert.pem"])
     await writeFile(
       join(consumer, file),
