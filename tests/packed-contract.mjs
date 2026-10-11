@@ -73,6 +73,15 @@ try {
     // @ts-expect-error Qualified API permissions belong to explicit resource policies.
     const microsoftScopes: Entry10.MicrosoftProviderOptions = { ...microsoftOptions, identityScopes: ["https://graph.microsoft.com/User.Read"] };
     void [microsoftProvider, microsoftCache, microsoftRedirect, microsoftScopes];
+    const googleOptions: Entry11.GoogleProviderOptions = { id: "google", clientId: "client", clientSecret: "secret", hostedDomain: "example.com", resources: [{ resource: "https://www.googleapis.com", scopes: ["https://www.googleapis.com/auth/drive.readonly"] }] };
+    const googleProvider: Entry8.ProviderDefinition = Entry11.createGoogleProvider(googleOptions);
+    // @ts-expect-error Browser SDK cache configuration is not a server preset option.
+    const googleCache: Entry11.GoogleProviderOptions = { ...googleOptions, cacheLocation: "localstorage" };
+    // @ts-expect-error App callback routing belongs to the shared engine.
+    const googleRedirect: Entry11.GoogleProviderOptions = { ...googleOptions, redirectUri: "https://app.test/callback" };
+    // @ts-expect-error Google offline access is an authorization parameter, not an OIDC scope.
+    const googleOffline: Entry11.GoogleProviderOptions = { ...googleOptions, identityScopes: ["openid", "offline_access"] };
+    void [googleProvider, googleCache, googleRedirect, googleOffline];
     // @ts-expect-error SDK persistence/cache configuration is deliberately not an Askr option.
     const persistent: Entry7.Auth0SessionOptions = { ...sdk, cacheLocation: "localstorage" };
     // @ts-expect-error Response formats must be explicitly selected.
@@ -211,6 +220,14 @@ try {
     cwd: consumer,
     stdio: "pipe",
   });
+  await writeFile(
+    join(consumer, "provider-google-native.mjs"),
+    await readFile("tests/provider-google-native.mjs"),
+  );
+  execFileSync(process.execPath, [join(consumer, "provider-google-native.mjs")], {
+    cwd: consumer,
+    stdio: "pipe",
+  });
   // The adapter is opt-in: importing it without its optional SDK fails, while
   // all native/server paths and every declaration above work without that peer.
   await writeFile(
@@ -259,6 +276,7 @@ try {
       nativeSdkAbsent: true,
       nativeAuth0SignedHttp: true,
       nativeMicrosoftSignedHttp: true,
+      nativeGoogleSignedHttp: true,
       optionalSdkNormalInstall: "2.28.3",
     }),
   );

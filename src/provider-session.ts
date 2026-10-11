@@ -657,7 +657,13 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
                 { ...authority, pending: [transaction.id], pendingUntil: transaction.expiresAt },
                 signal,
               );
-              return { ...committed, transaction };
+              const forceConsent =
+                providerPolicy(provider).tokenScopePolicy === "google" &&
+                previous?.value.provider === provider.id &&
+                previous.value.fingerprint === providerPolicy(provider).fingerprint &&
+                previous.value.principal !== undefined &&
+                (!previous.value.refreshToken || previous.value.refreshing !== undefined);
+              return { ...committed, transaction, forceConsent };
             },
             { signal },
           ),
@@ -682,6 +688,7 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
       };
       for (const [name, value] of Object.entries({ ...provider.authorizationParams, ...protocol }))
         authorization.searchParams.set(name, value);
+      if (result.forceConsent) authorization.searchParams.set("prompt", "consent");
       if (provider.responseMode === "form_post")
         authorization.searchParams.set("response_mode", "form_post");
       const resourceParameter = providerPolicy(provider).authorizationResourceParameter;
@@ -892,7 +899,8 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
                       ? previous.value.refreshToken
                       : undefined),
                   identityScopes:
-                    providerPolicy(provider).tokenScopePolicy === "microsoft"
+                    providerPolicy(provider).tokenScopePolicy === "microsoft" ||
+                    providerPolicy(provider).tokenScopePolicy === "google"
                       ? [...new Set(["openid", ...tokens.scopes])].sort()
                       : tokens.scopes.filter(
                           (scope) =>

@@ -9,6 +9,7 @@ export default defineConfig({
       server: "src/server.ts",
       "providers/auth0": "src/providers/auth0.ts",
       "providers/microsoft": "src/providers/microsoft.ts",
+      "providers/google": "src/providers/google.ts",
       browser: "src/browser.ts",
       auth0: "src/auth0.ts",
       saml: "src/saml.ts",
