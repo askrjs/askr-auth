@@ -3,12 +3,10 @@ import { generateKeyPairSync } from "node:crypto";
 import { createServer } from "node:http";
 import { createJwtSigner } from "../src/jwt";
 import { createProviderSession } from "../src/server";
-import type {
-  ProviderDefinition,
-  ProviderLoginRequest,
-  ProviderLogoutRequest,
-  ProviderSessionStore,
-} from "../src/server";
+import type { ProviderDefinition, ProviderSession, ProviderSessionStore } from "../src/server";
+
+type ProviderLoginRequest = Parameters<ProviderSession["login"]>[1];
+type ProviderLogoutRequest = NonNullable<Parameters<ProviderSession["logout"]>[1]>;
 
 export const appOrigin = "https://app.example.test";
 export const clientId = "test-client";

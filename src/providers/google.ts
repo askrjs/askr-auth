@@ -6,7 +6,7 @@ import type {
   ProviderDefinition,
 } from "../provider-session-types";
 
-export interface GoogleProviderOptions {
+interface GoogleProviderOptions {
   readonly id: string;
   readonly clientId: string;
   readonly clientSecret: ProviderClientAuthentication["secret"];
@@ -17,7 +17,7 @@ export interface GoogleProviderOptions {
 const issuer = "https://accounts.google.com";
 const identityScopes = ["openid", "profile", "email"] as const;
 /** Confidential Google Web OAuth, exact signed hosted-domain policy, and explicit API grants. */
-export function createGoogleProvider(options: GoogleProviderOptions): ProviderDefinition {
+function createGoogleProvider(options: GoogleProviderOptions): ProviderDefinition {
   if (!options || typeof options !== "object" || Array.isArray(options)) throw configurationError();
   const hostedDomain = options.hostedDomain;
   if (
@@ -71,3 +71,5 @@ export function createGoogleProvider(options: GoogleProviderOptions): ProviderDe
     throw configurationError();
   return provider;
 }
+
+export { createGoogleProvider };

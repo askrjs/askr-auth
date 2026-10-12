@@ -1,4 +1,5 @@
 {
+  "declarationCounts": { "pairs": 92, "values": 33, "types": 59 },
   "exportKeys": [
     ".",
     "./jwt",
@@ -147,43 +148,44 @@
       ],
       "types": [
         "OidcProviderOptions",
-        "ProviderCapabilities",
-        "ProviderClientAuthentication",
         "ProviderDefinition",
-        "ProviderLoginRequest",
-        "ProviderLogoutRequest",
         "ProviderSession",
         "ProviderSessionErrorCode",
         "ProviderSessionOptions",
         "ProviderSessionRecord",
-        "ProviderSessionStore",
-        "ProviderTokenRequest"
+        "ProviderSessionStore"
       ],
-      "removed": []
+      "removed": [
+        "ProviderTokenRequest",
+        "ProviderLoginRequest",
+        "ProviderLogoutRequest",
+        "ProviderCapabilities",
+        "ProviderClientAuthentication"
+      ]
     },
     {
       "specifier": "@askrjs/auth/providers/auth0",
       "values": ["createAuth0Provider"],
-      "types": ["Auth0ProviderOptions"],
-      "removed": []
+      "types": [],
+      "removed": ["Auth0ProviderOptions"]
     },
     {
       "specifier": "@askrjs/auth/providers/microsoft",
       "values": ["createMicrosoftProvider"],
-      "types": ["MicrosoftProviderOptions"],
-      "removed": []
+      "types": [],
+      "removed": ["MicrosoftProviderOptions"]
     },
     {
       "specifier": "@askrjs/auth/providers/google",
       "values": ["createGoogleProvider"],
-      "types": ["GoogleProviderOptions"],
-      "removed": []
+      "types": [],
+      "removed": ["GoogleProviderOptions"]
     },
     {
       "specifier": "@askrjs/auth/providers/apple",
       "values": ["createAppleProvider"],
-      "types": ["AppleProviderOptions"],
-      "removed": []
+      "types": [],
+      "removed": ["AppleProviderOptions"]
     }
   ],
   "privateSubpaths": [

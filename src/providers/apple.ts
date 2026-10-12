@@ -7,7 +7,7 @@ import type { JwtSigner } from "../jwt-signer";
 import type { ProviderDefinition } from "../provider-session-types";
 import type { Principal } from "../model";
 
-export interface AppleProviderOptions {
+interface AppleProviderOptions {
   readonly id: string;
   readonly servicesId: string;
   readonly teamId: string;
@@ -59,7 +59,7 @@ function profileHint(user: string | null) {
   }
 }
 /** Confidential Apple Services ID with server-owned signing and daily account verification. */
-export function createAppleProvider(options: AppleProviderOptions): ProviderDefinition {
+function createAppleProvider(options: AppleProviderOptions): ProviderDefinition {
   if (
     !options ||
     typeof options !== "object" ||
@@ -167,3 +167,5 @@ export function createAppleProvider(options: AppleProviderOptions): ProviderDefi
     },
   );
 }
+
+export { createAppleProvider };

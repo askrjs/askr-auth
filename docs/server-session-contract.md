@@ -438,27 +438,27 @@ are not acceptance evidence.
 ## Public API shape
 
 ```ts
-// Reviewed-design API candidate; not compiled or implemented. Owner: @askrjs/auth/server.
+// Public owner: @askrjs/auth/server. Helper shapes below are private unless exported.
 import type { AuthContext, AuthResolver, Principal } from "@askrjs/auth";
 
-export interface ProviderTokenRequest {
+interface ProviderTokenRequest {
   readonly resource?: string;
   readonly scopes: readonly string[];
   readonly signal?: AbortSignal;
 }
-export interface ProviderLoginRequest {
+interface ProviderLoginRequest {
   readonly provider: string;
   readonly returnTo: string;
   readonly resource?: string;
   readonly scopes?: readonly string[];
 }
-export interface ProviderLogoutRequest {
+interface ProviderLogoutRequest {
   readonly provider?: string; // Optional grant selector; defaults to the current identity provider.
   readonly providerLogout?: boolean; // Default false; independent of local retirement/revocation.
   readonly returnTo?: string; // Only used for explicit providerLogout continuation.
   readonly revoke?: boolean; // Default false; revoke each unique selected grant family.
 }
-export type ProviderClientAuthentication = {
+type ProviderClientAuthentication = {
   readonly method: "client_secret_post" | "client_secret_basic";
   readonly secret:
     | string
@@ -467,7 +467,7 @@ export type ProviderClientAuthentication = {
         readonly signal: AbortSignal;
       }) => string | PromiseLike<string>);
 };
-export interface ProviderCapabilities {
+interface ProviderCapabilities {
   readonly renewal: "refresh" | "account-check" | "none";
   readonly incrementalConsent: boolean;
   readonly providerLogout: boolean;
@@ -586,3 +586,9 @@ export declare class InteractionRequiredError extends Error {
   readonly scopes: readonly string[];
 }
 ```
+
+For reusable method arguments, provider capabilities and client authentication,
+derive types from the retained `ProviderSession` and `ProviderDefinition` owners.
+Preset options derive from each factory's `Parameters<typeof createProvider>[0]`.
+See the [nine-name migration](0.5.0-api.md#method-and-factory-type-ownership);
+these helper shapes are not standalone public exports.

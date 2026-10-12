@@ -6,7 +6,7 @@ import type {
   ProviderDefinition,
 } from "../provider-session-types";
 
-export interface MicrosoftProviderOptions {
+interface MicrosoftProviderOptions {
   readonly id: string;
   readonly tenantId: string;
   readonly clientId: string;
@@ -16,7 +16,7 @@ export interface MicrosoftProviderOptions {
 }
 const identityScopes = ["openid", "profile", "email", "offline_access"] as const;
 /** One explicit Entra tenant, confidential Web credentials, and qualified delegated API scopes. */
-export function createMicrosoftProvider(options: MicrosoftProviderOptions): ProviderDefinition {
+function createMicrosoftProvider(options: MicrosoftProviderOptions): ProviderDefinition {
   if (
     !options ||
     typeof options !== "object" ||
@@ -85,3 +85,5 @@ export function createMicrosoftProvider(options: MicrosoftProviderOptions): Prov
   }
   return provider;
 }
+
+export { createMicrosoftProvider };

@@ -1,6 +1,5 @@
 import { afterEach, expect, it } from "vite-plus/test";
 import { createAuth0Provider } from "../src/providers/auth0";
-import type { Auth0ProviderOptions } from "../src/providers/auth0";
 import { createProviderSession } from "../src/server";
 import {
   presetFixture,
@@ -9,6 +8,8 @@ import {
   clientId,
   clientSecret,
 } from "./provider-preset-fixture";
+
+type Auth0ProviderOptions = Parameters<typeof createAuth0Provider>[0];
 
 afterEach(closePresetFixtures);
 
