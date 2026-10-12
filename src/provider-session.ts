@@ -1387,10 +1387,23 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
         resource,
         scopes,
       );
+      // requireIdentity decrypts the record it read. A shared store can retire
+      // or replace that authority while decryption is pending, so take one
+      // final record view after decrypt and do not await again before staging.
+      const finalRecord = await record(afterIssuance.value.id, delivery);
+      if (
+        !finalRecord ||
+        finalRecord.retired ||
+        finalRecord.expiresAt <= now() ||
+        finalRecord.revision !== afterIssuance.record.revision ||
+        finalRecord.value !== afterIssuance.record.value
+      )
+        throw interaction(provider, resource, scopes);
       const afterGrant = grantFor(afterIssuance.value, resource, scopes);
       if (afterGrant?.accessToken !== result.token || afterGrant.expiresAt !== result.expiresAt)
         throw interaction(provider, resource, scopes);
       requireLiveAccessToken(result.expiresAt);
+      checkCancellation(delivery);
       stage(request, issuance);
       return result.token;
     },

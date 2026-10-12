@@ -1357,9 +1357,14 @@ it("delivers a freshly acquired live token even inside the proactive cache leewa
   expect((await f.engine.resolve(request())).authenticated).toBe(true);
 });
 
-it.each(["logout", "new-login"] as const)(
-  "does not deliver a renewed access token when %s retires the session during final cookie sealing",
-  async (retirement) => {
+it.each([
+  ["logout", "cookie sealing"],
+  ["new-login", "cookie sealing"],
+  ["logout", "authority decryption"],
+  ["new-login", "authority decryption"],
+] as const)(
+  "does not deliver a renewed access token when %s retires the session during final %s",
+  async (retirement, phase) => {
     const store = memoryAuthority(100, () => 0);
     const f = await fixture("query", {
       provider: { capabilities: apiPolicy },
@@ -1377,14 +1382,18 @@ it.each(["logout", "new-login"] as const)(
     const subtle = crypto.subtle;
     const prototype = Object.getPrototypeOf(subtle) as SubtleCrypto;
     const descriptor = Object.getOwnPropertyDescriptor(prototype, "encrypt")!;
+    const decryptDescriptor = Object.getOwnPropertyDescriptor(prototype, "decrypt")!;
     const encrypt = subtle.encrypt.bind(subtle);
+    const decrypt = subtle.decrypt.bind(subtle);
     const sessionContext = JSON.stringify([
       "askr-provider-session",
       1,
       origin,
       "__Host-askr-session",
     ]);
+    const authorityContext = JSON.stringify(["askr-provider-session", 1, origin, "authority"]);
     let sessionSeals = 0;
+    let holdAuthorityDecrypt = false;
     let release!: () => void;
     let reachHeldSeal!: () => void;
     const sealGate = new Promise<void>((resolve) => {
@@ -1402,17 +1411,42 @@ it.each(["logout", "new-login"] as const)(
             new Uint8Array(additionalData as unknown as ArrayBufferLike),
           );
           if (context === sessionContext && ++sessionSeals === 3) {
-            reachHeldSeal();
-            return sealGate.then(() => encrypt(algorithm, key, data));
+            if (phase === "cookie sealing") {
+              reachHeldSeal();
+              return sealGate.then(() => encrypt(algorithm, key, data));
+            }
+            holdAuthorityDecrypt = true;
           }
         }
         return encrypt(algorithm, key, data);
       } satisfies SubtleCrypto["encrypt"],
     });
+    Object.defineProperty(prototype, "decrypt", {
+      ...decryptDescriptor,
+      value: function (algorithm: AlgorithmIdentifier, key: CryptoKey, data: BufferSource) {
+        if (
+          holdAuthorityDecrypt &&
+          typeof algorithm === "object" &&
+          algorithm !== null &&
+          "additionalData" in algorithm
+        ) {
+          const additionalData = (algorithm as AesGcmParams).additionalData;
+          const context = new TextDecoder().decode(
+            new Uint8Array(additionalData as unknown as ArrayBufferLike),
+          );
+          if (context === authorityContext) {
+            holdAuthorityDecrypt = false;
+            reachHeldSeal();
+            return sealGate.then(() => decrypt(algorithm, key, data));
+          }
+        }
+        return decrypt(algorithm, key, data);
+      } satisfies SubtleCrypto["decrypt"],
+    });
 
     const pending = f.engine.token(request, "oidc", { scopes: ["read"] });
     try {
-      await heldSeal;
+      await boundLifecycle(heldSeal);
       if (retirement === "logout") {
         const logout = new Request(`${origin}/auth/logout`, {
           method: "POST",
@@ -1437,6 +1471,7 @@ it.each(["logout", "new-login"] as const)(
     } finally {
       release();
       Object.defineProperty(prototype, "encrypt", descriptor);
+      Object.defineProperty(prototype, "decrypt", decryptDescriptor);
     }
 
     await expect(pending).rejects.toMatchObject({
