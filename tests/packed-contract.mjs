@@ -215,6 +215,9 @@ try {
     `
     import assert from 'node:assert/strict';
     import { generateKeyPairSync } from 'node:crypto';
+    // Node 26 provides its own Web Storage global; this consumer contract checks
+    // that the packed server package still works without browser storage.
+    Reflect.deleteProperty(globalThis, "sessionStorage");
     assert.equal(typeof globalThis.window, "undefined");
     assert.equal(typeof globalThis.document, "undefined");
     assert.equal(typeof globalThis.sessionStorage, "undefined");
