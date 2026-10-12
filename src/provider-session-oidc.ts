@@ -279,7 +279,7 @@ export async function validateProviderIdentity(
   nonce: string,
   jwksUri: string,
   request: typeof fetch,
-  now: number,
+  clock: () => number,
   previousSubject?: string,
 ): Promise<ValidatedProviderIdentity> {
   try {
@@ -292,7 +292,7 @@ export async function validateProviderIdentity(
       issuer: claimedIssuer,
       audience: provider.clientId,
       nonce,
-      clock: () => now / 1000,
+      clock: () => clock() / 1000,
       clockSkewSeconds: 0,
       jwks: async () => {
         const response = await request(jwksUri);

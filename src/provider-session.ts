@@ -690,7 +690,7 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
                     latest.value.nonce!,
                     metadata.jwks_uri,
                     transport,
-                    now(),
+                    now,
                     latest.value.principal!.subject!,
                   ),
                   signal,
@@ -1069,7 +1069,7 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
             transaction.nonce,
             metadata.jwks_uri,
             transport,
-            now(),
+            now,
           ),
           signal,
         );
@@ -1298,7 +1298,7 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
                       latest.value.nonce!,
                       metadata.jwks_uri,
                       transport,
-                      now(),
+                      now,
                       latest.value.principal!.subject!,
                     ),
                     signal,
@@ -1364,12 +1364,32 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
           .catch(() => undefined);
       }
       const result = await waitFor(operation, caller);
-      await requireIdentity(result.authority.value, caller, provider, resource, scopes);
-      const issuance = await sessionIssuance(
+      const delivery = composed(caller, identitySignal(result.authority.value));
+      const beforeIssuance = await requireIdentity(
         result.authority.value,
-        result.authority.record.revision,
-        caller,
+        delivery,
+        provider,
+        resource,
+        scopes,
       );
+      const beforeGrant = grantFor(beforeIssuance.value, resource, scopes);
+      if (beforeGrant?.accessToken !== result.token || beforeGrant.expiresAt !== result.expiresAt)
+        throw interaction(provider, resource, scopes);
+      const issuance = await sessionIssuance(
+        beforeIssuance.value,
+        beforeIssuance.record.revision,
+        delivery,
+      );
+      const afterIssuance = await requireIdentity(
+        beforeIssuance.value,
+        delivery,
+        provider,
+        resource,
+        scopes,
+      );
+      const afterGrant = grantFor(afterIssuance.value, resource, scopes);
+      if (afterGrant?.accessToken !== result.token || afterGrant.expiresAt !== result.expiresAt)
+        throw interaction(provider, resource, scopes);
       requireLiveAccessToken(result.expiresAt);
       stage(request, issuance);
       return result.token;

@@ -47,11 +47,13 @@ async function fixture(
   let now = 1_800_000_000_000;
   let exchanges = 0;
   let refreshes = 0;
+  let jwksRequests = 0;
   let refreshError: string | undefined;
   const refreshTokens = new Set<string>();
   const refreshSignals: AbortSignal[] = [];
   const pendingTransports = new Set<Promise<Response>>();
   let delay: Promise<void> | undefined;
+  let jwksDelay: Promise<void> | undefined;
   let claims: Record<string, unknown> = {};
   const codes = new Map<string, { nonce: string; challenge: string }>();
   const server = createServer(async (request, response) => {
@@ -68,10 +70,13 @@ async function fixture(
           token_endpoint: `${issuer}/token`,
           jwks_uri: `${issuer}/jwks`,
         });
-      if (url.pathname === "/jwks")
+      if (url.pathname === "/jwks") {
+        jwksRequests++;
+        await jwksDelay;
         return json({
           keys: [{ ...pair.publicKey.export({ format: "jwk" }), kid: "one", alg: "RS256" }],
         });
+      }
       if (url.pathname === "/authorize") {
         const code = crypto.randomUUID();
         codes.set(code, {
@@ -195,11 +200,12 @@ async function fixture(
   async function start(
     cookie = "",
     login: { resource?: string; scopes?: readonly string[]; returnTo?: string } = {},
+    target = engine,
   ) {
     const request = new Request(`${origin}/auth/login/oidc`, { headers: { cookie } });
-    const response = await engine.finalize(
+    const response = await target.finalize(
       request,
-      await engine.login(request, { provider: "oidc", returnTo: "/private?tab=one", ...login }),
+      await target.login(request, { provider: "oidc", returnTo: "/private?tab=one", ...login }),
     );
     const authorization = response.headers.get("location")!;
     const result = await providerFetch(authorization, { redirect: "manual" });
@@ -239,6 +245,7 @@ async function fixture(
     signIn,
     exchanges: () => exchanges,
     refreshes: () => refreshes,
+    jwksRequests: () => jwksRequests,
     refreshSignals: () => [...refreshSignals],
     pendingTransports: () => [...pendingTransports],
     refreshError: (value: string) => {
@@ -249,6 +256,9 @@ async function fixture(
     },
     delay: (promise: Promise<void>) => {
       delay = promise;
+    },
+    jwksDelay: (promise: Promise<void>) => {
+      jwksDelay = promise;
     },
     claims: (value: Record<string, unknown>) => {
       claims = value;
@@ -384,6 +394,35 @@ it("rejects a slow exchange after its original transaction expiry", async () => 
     (await f.engine.finalize(request, new Response("failure"))).headers
       .getSetCookie()
       .some((p) => p.startsWith("__Host-askr-session=")),
+  ).toBe(false);
+});
+
+it("rejects an ID token that expires during awaited JWKS verification", async () => {
+  const f = await fixture();
+  const started = await f.start();
+  f.claims({ exp: 1_800_000_001 });
+  let release!: () => void;
+  f.jwksDelay(
+    new Promise<void>((resolve) => {
+      release = resolve;
+    }),
+  );
+  const request = f.callback(started.location, started.cookie);
+  const pending = f.engine.callback(request, { provider: "oidc" });
+  try {
+    await expect.poll(() => f.jwksRequests(), { timeout: 1000 }).toBe(1);
+    f.advance(2000);
+  } finally {
+    release();
+  }
+  await expect(pending).rejects.toMatchObject({ code: "invalid-callback" });
+  const failure = await f.engine.finalize(request, new Response("failure"));
+  expect(
+    failure.headers.getSetCookie().some((line) => line.startsWith("__Host-askr-session=")),
+  ).toBe(false);
+  expect(
+    (await f.engine.resolve(new Request(origin, { headers: { cookie: started.cookie } })))
+      .authenticated,
   ).toBe(false);
 });
 
@@ -1317,6 +1356,99 @@ it("delivers a freshly acquired live token even inside the proactive cache leewa
   expect(f.refreshes()).toBe(1);
   expect((await f.engine.resolve(request())).authenticated).toBe(true);
 });
+
+it.each(["logout", "new-login"] as const)(
+  "does not deliver a renewed access token when %s retires the session during final cookie sealing",
+  async (retirement) => {
+    const store = memoryAuthority(100, () => 0);
+    const f = await fixture("query", {
+      provider: { capabilities: apiPolicy },
+      session: { leewaySeconds: 60, store },
+    });
+    const signed = await f.signIn({ resource: "https://api.test", scopes: ["read"] });
+    const request = new Request(origin, { headers: { cookie: signed.cookie } });
+    const retirementEngine = createProviderSession({
+      ...f.options,
+      session: { ...f.options.session, store },
+    });
+    cleanup.push(() => retirementEngine.close());
+    f.advance(30_000);
+
+    const subtle = crypto.subtle;
+    const prototype = Object.getPrototypeOf(subtle) as SubtleCrypto;
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, "encrypt")!;
+    const encrypt = subtle.encrypt.bind(subtle);
+    const sessionContext = JSON.stringify([
+      "askr-provider-session",
+      1,
+      origin,
+      "__Host-askr-session",
+    ]);
+    let sessionSeals = 0;
+    let release!: () => void;
+    let reachHeldSeal!: () => void;
+    const sealGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const heldSeal = new Promise<void>((resolve) => {
+      reachHeldSeal = resolve;
+    });
+    Object.defineProperty(prototype, "encrypt", {
+      ...descriptor,
+      value: function (algorithm: AlgorithmIdentifier, key: CryptoKey, data: BufferSource) {
+        if (typeof algorithm === "object" && algorithm !== null && "additionalData" in algorithm) {
+          const additionalData = (algorithm as AesGcmParams).additionalData;
+          const context = new TextDecoder().decode(
+            new Uint8Array(additionalData as unknown as ArrayBufferLike),
+          );
+          if (context === sessionContext && ++sessionSeals === 3) {
+            reachHeldSeal();
+            return sealGate.then(() => encrypt(algorithm, key, data));
+          }
+        }
+        return encrypt(algorithm, key, data);
+      } satisfies SubtleCrypto["encrypt"],
+    });
+
+    const pending = f.engine.token(request, "oidc", { scopes: ["read"] });
+    try {
+      await heldSeal;
+      if (retirement === "logout") {
+        const logout = new Request(`${origin}/auth/logout`, {
+          method: "POST",
+          headers: { cookie: signed.cookie },
+        });
+        const response = await retirementEngine.logout(logout);
+        await retirementEngine.finalize(logout, response);
+      } else {
+        f.claims({ sub: "account-two" });
+        const newer = await f.start(
+          signed.cookie,
+          {
+            resource: "https://api.test",
+            scopes: ["read"],
+          },
+          retirementEngine,
+        );
+        const callback = f.callback(newer.location, newer.cookie);
+        const response = await retirementEngine.callback(callback, { provider: "oidc" });
+        await retirementEngine.finalize(callback, response);
+      }
+    } finally {
+      release();
+      Object.defineProperty(prototype, "encrypt", descriptor);
+    }
+
+    await expect(pending).rejects.toMatchObject({
+      code: "interaction-required",
+      reason: "login",
+    });
+    const failure = await f.engine.finalize(request, new Response("late"));
+    expect(
+      failure.headers.getSetCookie().some((line) => line.startsWith("__Host-askr-session=")),
+    ).toBe(false);
+  },
+);
 
 // Auth65 carry-forward: no injected-clock advance in this lifecycle matrix.
 function observeLifecycle<T>(pending: Promise<T>) {
