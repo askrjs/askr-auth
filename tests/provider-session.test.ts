@@ -1485,6 +1485,257 @@ it.each([
   },
 );
 
+it.each(["logout", "new-login"] as const)(
+  "coordinates renewed delivery's held final store read with %s",
+  async (retirement) => {
+    const backing = memoryAuthority(100, () => 0);
+    let finalDelivery = false;
+    let readsAfterSeal = 0;
+    let authorityLocked = false;
+    let reachRead!: () => void;
+    let releaseRead!: () => void;
+    const heldRead = new Promise<void>((resolve) => {
+      reachRead = resolve;
+    });
+    const readGate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    const store: typeof backing = {
+      ...backing,
+      async read(id, options) {
+        const snapshot = await backing.read(id, options);
+        if (finalDelivery && ++readsAfterSeal === 2) {
+          reachRead();
+          await readGate;
+        }
+        return snapshot;
+      },
+      withLock(key, operation, options) {
+        return backing.withLock(
+          key,
+          async () => {
+            if (key.startsWith("authority:")) authorityLocked = true;
+            try {
+              return await operation();
+            } finally {
+              if (key.startsWith("authority:")) authorityLocked = false;
+            }
+          },
+          options,
+        );
+      },
+    };
+    const f = await fixture("query", {
+      provider: { capabilities: apiPolicy },
+      session: { leewaySeconds: 60, store },
+    });
+    const signed = await f.signIn({ resource: "https://api.test", scopes: ["read"] });
+    const request = new Request(origin, { headers: { cookie: signed.cookie } });
+    let reachRetirement!: () => void;
+    const retirementAttempted = new Promise<void>((resolve) => {
+      reachRetirement = resolve;
+    });
+    const retirementEngine = createProviderSession({
+      ...f.options,
+      session: {
+        ...f.options.session,
+        store: {
+          ...backing,
+          withLock(key, operation, options) {
+            if (key.startsWith("authority:")) reachRetirement();
+            return backing.withLock(key, operation, options);
+          },
+        },
+      },
+    });
+    cleanup.push(() => retirementEngine.close());
+    f.advance(30_000);
+    const prototype = Object.getPrototypeOf(crypto.subtle) as SubtleCrypto;
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, "encrypt")!;
+    const encrypt = crypto.subtle.encrypt.bind(crypto.subtle);
+    const context = JSON.stringify(["askr-provider-session", 1, origin, "__Host-askr-session"]);
+    let sessionSeals = 0;
+    Object.defineProperty(prototype, "encrypt", {
+      ...descriptor,
+      value: function (algorithm: AlgorithmIdentifier, key: CryptoKey, data: BufferSource) {
+        if (
+          typeof algorithm === "object" &&
+          algorithm !== null &&
+          "additionalData" in algorithm &&
+          new TextDecoder().decode(
+            new Uint8Array(
+              (algorithm as AesGcmParams).additionalData as unknown as ArrayBufferLike,
+            ),
+          ) === context &&
+          ++sessionSeals === 3
+        )
+          finalDelivery = true;
+        return encrypt(algorithm, key, data);
+      } satisfies SubtleCrypto["encrypt"],
+    });
+    let retired = false;
+    const pending = observeLifecycle(
+      f.engine.token(request, "oidc", { scopes: ["read"] }).then((token) => {
+        expect(retired, "a completed retirement must never precede token delivery").toBe(false);
+        return token;
+      }),
+    );
+    let retiring: Promise<void> | undefined;
+    try {
+      await boundLifecycle(heldRead);
+      const heldUnderLock = authorityLocked;
+      retiring = (async () => {
+        if (retirement === "logout") {
+          const logout = new Request(`${origin}/auth/logout`, {
+            method: "POST",
+            headers: { cookie: signed.cookie },
+          });
+          await retirementEngine.finalize(logout, await retirementEngine.logout(logout));
+        } else {
+          f.claims({ sub: "account-two" });
+          const newer = await f.start(
+            signed.cookie,
+            { resource: "https://api.test", scopes: ["read"] },
+            retirementEngine,
+          );
+          const callback = f.callback(newer.location, newer.cookie);
+          await retirementEngine.finalize(
+            callback,
+            await retirementEngine.callback(callback, { provider: "oidc" }),
+          );
+        }
+        retired = true;
+      })();
+      await boundLifecycle(retirementAttempted);
+      // If delivery did not acquire the shared lock, let retirement finish to
+      // reproduce the stale snapshot. A correct implementation queues it.
+      if (!heldUnderLock) await boundLifecycle(retiring);
+      expect(retired).toBe(false);
+      expect(heldUnderLock).toBe(true);
+    } finally {
+      releaseRead();
+      Object.defineProperty(prototype, "encrypt", descriptor);
+    }
+    expect(await boundLifecycle(pending)).toEqual({ status: "fulfilled", value: "RENEWED_1" });
+    await boundLifecycle(retiring!);
+    const failure = await f.engine.finalize(request, new Response("late"));
+    expect(
+      failure.headers.getSetCookie().some((line) => line.startsWith("__Host-askr-session=")),
+    ).toBe(false);
+  },
+);
+
+it.each(["logout", "new-login"] as const)(
+  "rejects cached token delivery when %s wins during authority reading",
+  async (retirement) => {
+    const backing = memoryAuthority(100, () => 0);
+    let armed = false;
+    let reads = 0;
+    let reachRead!: () => void;
+    let releaseRead!: () => void;
+    const heldRead = new Promise<void>((resolve) => {
+      reachRead = resolve;
+    });
+    const readGate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    const store: typeof backing = {
+      ...backing,
+      async read(id, options) {
+        const snapshot = await backing.read(id, options);
+        if (armed && ++reads === 2) {
+          reachRead();
+          await readGate;
+        }
+        return snapshot;
+      },
+    };
+    const f = await fixture("query", { provider: { capabilities: apiPolicy }, session: { store } });
+    const signed = await f.signIn({ resource: "https://api.test", scopes: ["read"] });
+    const request = new Request(origin, { headers: { cookie: signed.cookie } });
+    const retirementEngine = createProviderSession({
+      ...f.options,
+      session: { ...f.options.session, store: backing },
+    });
+    cleanup.push(() => retirementEngine.close());
+    armed = true;
+    const pending = observeLifecycle(f.engine.token(request, "oidc", { scopes: ["read"] }));
+    try {
+      await boundLifecycle(heldRead);
+      if (retirement === "logout") {
+        const logout = new Request(`${origin}/auth/logout`, {
+          method: "POST",
+          headers: { cookie: signed.cookie },
+        });
+        await retirementEngine.finalize(logout, await retirementEngine.logout(logout));
+      } else {
+        f.claims({ sub: "account-two" });
+        const newer = await f.start(
+          signed.cookie,
+          { resource: "https://api.test", scopes: ["read"] },
+          retirementEngine,
+        );
+        const callback = f.callback(newer.location, newer.cookie);
+        await retirementEngine.finalize(
+          callback,
+          await retirementEngine.callback(callback, { provider: "oidc" }),
+        );
+      }
+    } finally {
+      releaseRead();
+    }
+    expect(await boundLifecycle(pending)).toMatchObject({
+      status: "rejected",
+      error: { code: "interaction-required", reason: "login" },
+    });
+  },
+);
+
+it("delivers an unchanged cached grant after a concurrent login starts", async () => {
+  const backing = memoryAuthority(100, () => 0);
+  let armed = false;
+  let reads = 0;
+  let reachRead!: () => void;
+  let releaseRead!: () => void;
+  const heldRead = new Promise<void>((resolve) => {
+    reachRead = resolve;
+  });
+  const readGate = new Promise<void>((resolve) => {
+    releaseRead = resolve;
+  });
+  const store: typeof backing = {
+    ...backing,
+    async read(id, options) {
+      const snapshot = await backing.read(id, options);
+      if (armed && ++reads === 2) {
+        reachRead();
+        await readGate;
+      }
+      return snapshot;
+    },
+  };
+  const f = await fixture("query", { provider: { capabilities: apiPolicy }, session: { store } });
+  const signed = await f.signIn({ resource: "https://api.test", scopes: ["read"] });
+  const other = createProviderSession({
+    ...f.options,
+    session: { ...f.options.session, store: backing },
+  });
+  cleanup.push(() => other.close());
+  armed = true;
+  const pending = observeLifecycle(
+    f.engine.token(new Request(origin, { headers: { cookie: signed.cookie } }), "oidc", {
+      scopes: ["read"],
+    }),
+  );
+  try {
+    await boundLifecycle(heldRead);
+    await f.start(signed.cookie, { resource: "https://api.test", scopes: ["read"] }, other);
+  } finally {
+    releaseRead();
+  }
+  expect(await boundLifecycle(pending)).toEqual({ status: "fulfilled", value: "ACCESS_CANARY" });
+});
+
 // Auth65 carry-forward: no injected-clock advance in this lifecycle matrix.
 function observeLifecycle<T>(pending: Promise<T>) {
   return pending.then(

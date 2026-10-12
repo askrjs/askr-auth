@@ -565,6 +565,51 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
   function requireLiveAccessToken(expiresAt: number) {
     if (expiresAt <= now()) throw new ProviderSessionError("provider-unavailable");
   }
+  function deliverToken(
+    request: Request,
+    authority: LocatedAuthority,
+    provider: ProviderDefinition,
+    resource: string,
+    scopes: readonly string[],
+    token: string,
+    expiresAt: number,
+    signal: AbortSignal,
+    issuance?: Issuance,
+  ) {
+    return stored(
+      () =>
+        store.withLock(
+          `authority:${authority.value.id}`,
+          async () => {
+            // A read can capture live state and resolve after retirement. Hold the
+            // same lock as logout/replacement through the read and synchronous use.
+            // Cached grants can survive unrelated revision changes; reload their
+            // identity under the lock instead of rejecting an unchanged grant.
+            const checked = issuance
+              ? authority
+              : await requireIdentity(authority.value, signal, provider, resource, scopes);
+            const current = await record(checked.value.id, signal);
+            if (
+              !current ||
+              current.retired ||
+              current.expiresAt <= now() ||
+              current.revision !== checked.record.revision ||
+              current.value !== checked.record.value
+            )
+              throw interaction(provider, resource, scopes);
+            const grant = grantFor(checked.value, resource, scopes);
+            if (grant?.accessToken !== token || grant.expiresAt !== expiresAt)
+              throw interaction(provider, resource, scopes);
+            requireLiveAccessToken(expiresAt);
+            checkCancellation(signal);
+            if (issuance) stage(request, issuance);
+            return token;
+          },
+          { signal },
+        ),
+      signal,
+    );
+  }
 
   const accountFresh = (authority: Authority) => {
     const checkedAt = authority.accountCheckedAt;
@@ -1197,7 +1242,17 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
         throw interaction(provider, resource, scopes);
       const active = await requireIdentity(original.value, caller, provider, resource, scopes);
       const existing = grantFor(active.value, resource, scopes);
-      if (usable(existing)) return existing!.accessToken;
+      if (usable(existing))
+        return deliverToken(
+          request,
+          active,
+          provider,
+          resource,
+          scopes,
+          existing!.accessToken,
+          existing!.expiresAt,
+          caller,
+        );
       if (!existing) throw interaction(provider, resource, scopes, "consent");
       if (provider.capabilities.renewal !== "refresh" || !active.value.refreshToken)
         throw interaction(provider, resource, scopes);
@@ -1387,25 +1442,17 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
         resource,
         scopes,
       );
-      // requireIdentity decrypts the record it read. A shared store can retire
-      // or replace that authority while decryption is pending, so take one
-      // final record view after decrypt and do not await again before staging.
-      const finalRecord = await record(afterIssuance.value.id, delivery);
-      if (
-        !finalRecord ||
-        finalRecord.retired ||
-        finalRecord.expiresAt <= now() ||
-        finalRecord.revision !== afterIssuance.record.revision ||
-        finalRecord.value !== afterIssuance.record.value
-      )
-        throw interaction(provider, resource, scopes);
-      const afterGrant = grantFor(afterIssuance.value, resource, scopes);
-      if (afterGrant?.accessToken !== result.token || afterGrant.expiresAt !== result.expiresAt)
-        throw interaction(provider, resource, scopes);
-      requireLiveAccessToken(result.expiresAt);
-      checkCancellation(delivery);
-      stage(request, issuance);
-      return result.token;
+      return deliverToken(
+        request,
+        afterIssuance,
+        provider,
+        resource,
+        scopes,
+        result.token,
+        result.expiresAt,
+        delivery,
+        issuance,
+      );
     },
     async logout(request, logoutOptions = {}) {
       live();
