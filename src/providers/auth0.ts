@@ -7,7 +7,7 @@ import type {
 } from "../provider-session-types";
 
 /** Confidential Auth0 web-application configuration; app/session transport belongs to the shared engine. */
-export interface Auth0ProviderOptions {
+interface Auth0ProviderOptions {
   readonly id: string;
   readonly domain: string;
   readonly clientId: string;
@@ -24,7 +24,7 @@ export interface Auth0ProviderOptions {
 const identityScopes = ["openid", "profile", "email", "offline_access"] as const;
 
 /** Create an Auth0 definition using the shared signed OIDC/session engine. */
-export function createAuth0Provider(options: Auth0ProviderOptions): ProviderDefinition {
+function createAuth0Provider(options: Auth0ProviderOptions): ProviderDefinition {
   if (!options || typeof options !== "object" || Array.isArray(options)) throw configurationError();
   if (typeof options.domain !== "string" || options.domain.length > 253) throw configurationError();
   const domain = options.domain.toLowerCase();
@@ -96,3 +96,5 @@ export function createAuth0Provider(options: Auth0ProviderOptions): ProviderDefi
     },
   );
 }
+
+export { createAuth0Provider };

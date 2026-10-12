@@ -104,43 +104,86 @@ try {
     const requirement: Entry0.AuthRequirement = Entry0.requireRole('admin');
     const jwt: Entry1.JwtValidatorOptions = { issuer: 'issuer', jwks: { keys: [] }, clock: () => 0 };
     const oidc: Entry2.OidcClientOptions = { issuer: 'https://issuer.test', clientId: 'client', redirectUri: 'https://app.test/callback' };
-    const nativeOptions: Entry9.Auth0ProviderOptions = { id: "auth0", domain: "tenant.auth0.com", clientId: "client", clientSecret: "secret", organization: "org_expected", organizationName: "acme", resources: [{ resource: "https://api.test", scopes: ["read:records"] }] };
+    type Auth0Options = Parameters<typeof Entry9.createAuth0Provider>[0];
+    type MicrosoftOptions = Parameters<typeof Entry10.createMicrosoftProvider>[0];
+    type GoogleOptions = Parameters<typeof Entry11.createGoogleProvider>[0];
+    type AppleOptions = Parameters<typeof Entry12.createAppleProvider>[0];
+    type LoginOptions = Parameters<Entry8.ProviderSession["login"]>[1];
+    type LogoutOptions = NonNullable<Parameters<Entry8.ProviderSession["logout"]>[1]>;
+    type TokenOptions = Parameters<Entry8.ProviderSession["token"]>[2];
+    type Capabilities = Entry8.ProviderDefinition["capabilities"];
+    type ClientAuthentication = Entry8.ProviderDefinition["clientAuthentication"];
+    const authentication: ClientAuthentication = { method: "client_secret_post", secret: async ({ now, signal }) => {
+      const time: number = now;
+      const cancellation: AbortSignal = signal;
+      void [time, cancellation];
+      return "secret";
+    } };
+    const capabilities: Capabilities = { renewal: "refresh", incrementalConsent: true, providerLogout: false, revocation: false, resources: [{ resource: "https://api.test", scopes: ["read"] }] };
+    const login: LoginOptions = { provider: "auth0", returnTo: "/", resource: "https://api.test", scopes: ["read"] };
+    const logout: LogoutOptions = { revoke: true, providerLogout: false };
+    const token: TokenOptions = { resource: "https://api.test", scopes: ["read"], signal: new AbortController().signal };
+    // @ts-expect-error Request scopes retain their string element contract.
+    const invalidToken: TokenOptions = { scopes: [1] };
+    // @ts-expect-error Logout booleans are not truthy strings.
+    const invalidLogout: LogoutOptions = { revoke: "yes" };
+    // @ts-expect-error Login returnTo remains required.
+    const invalidLogin: LoginOptions = { provider: "auth0" };
+    // @ts-expect-error Only supported client authentication methods are allowed.
+    const invalidAuthentication: ClientAuthentication = { method: "none", secret: "secret" };
+    // @ts-expect-error Renewal policies remain a closed union.
+    const invalidCapabilities: Capabilities = { ...capabilities, renewal: "silent-iframe" };
+    // @ts-expect-error Provider resource scopes remain readonly.
+    capabilities.resources[0]!.scopes.push("write");
+    const generic = Entry8.createOidcProvider({ id: "generic", issuer: "https://issuer.test", clientId: "client", clientAuthentication: authentication, capabilities });
+    const contextual = Entry9.createAuth0Provider({ id: "contextual", domain: "tenant.auth0.com", clientId: "client", clientSecret: async ({ now, signal }) => {
+      const time: number = now;
+      const cancellation: AbortSignal = signal;
+      void [time, cancellation];
+      return "secret";
+    } });
+    // This is the annotation used by Server composition and generated CLI config.
+    const providerAuth = (): Entry8.ProviderSessionOptions => ({ origin: "https://app.test", providers: [generic, contextual], session: { secrets: ["secret"] } });
+    // @ts-expect-error Provider definitions remain factory-branded.
+    const copiedDefinition: Entry8.ProviderDefinition = { id: "copied", issuer: "https://issuer.test", clientId: "client", clientAuthentication: authentication, responseMode: "query", identityScopes: ["openid"], capabilities };
+    void [login, logout, token, invalidToken, invalidLogout, invalidLogin, invalidAuthentication, invalidCapabilities, copiedDefinition, providerAuth];
+    const nativeOptions: Auth0Options = { id: "auth0", domain: "tenant.auth0.com", clientId: "client", clientSecret: "secret", organization: "org_expected", organizationName: "acme", resources: [{ resource: "https://api.test", scopes: ["read:records"] }] };
     const nativeProvider: Entry8.ProviderDefinition = Entry9.createAuth0Provider(nativeOptions);
     // @ts-expect-error Browser SDK cache options do not configure the native server preset.
-    const nativeCache: Entry9.Auth0ProviderOptions = { ...nativeOptions, cacheLocation: "localstorage" };
+    const nativeCache: Auth0Options = { ...nativeOptions, cacheLocation: "localstorage" };
     // @ts-expect-error App callback routing belongs to the shared engine, not the preset.
-    const nativeRedirect: Entry9.Auth0ProviderOptions = { ...nativeOptions, redirectUri: "https://app.test/callback" };
+    const nativeRedirect: Auth0Options = { ...nativeOptions, redirectUri: "https://app.test/callback" };
     // @ts-expect-error API permission scopes belong to an explicit resource policy.
-    const nativeScopes: Entry9.Auth0ProviderOptions = { ...nativeOptions, identityScopes: ["read:records"] };
+    const nativeScopes: Auth0Options = { ...nativeOptions, identityScopes: ["read:records"] };
     void [nativeProvider, nativeCache, nativeRedirect, nativeScopes];
-    const microsoftOptions: Entry10.MicrosoftProviderOptions = { id: "microsoft", tenantId: "12345678-1234-1234-1234-123456789abc", clientId: "client", clientSecret: "secret", resources: [{ resource: "https://graph.microsoft.com", scopes: ["https://graph.microsoft.com/User.Read"] }] };
+    const microsoftOptions: MicrosoftOptions = { id: "microsoft", tenantId: "12345678-1234-1234-1234-123456789abc", clientId: "client", clientSecret: "secret", resources: [{ resource: "https://graph.microsoft.com", scopes: ["https://graph.microsoft.com/User.Read"] }] };
     const microsoftProvider: Entry8.ProviderDefinition = Entry10.createMicrosoftProvider(microsoftOptions);
     // @ts-expect-error Browser SDK cache configuration is not a server preset option.
-    const microsoftCache: Entry10.MicrosoftProviderOptions = { ...microsoftOptions, cacheLocation: "localstorage" };
+    const microsoftCache: MicrosoftOptions = { ...microsoftOptions, cacheLocation: "localstorage" };
     // @ts-expect-error App callback routing belongs to the shared engine.
-    const microsoftRedirect: Entry10.MicrosoftProviderOptions = { ...microsoftOptions, redirectUri: "https://app.test/callback" };
+    const microsoftRedirect: MicrosoftOptions = { ...microsoftOptions, redirectUri: "https://app.test/callback" };
     // @ts-expect-error Qualified API permissions belong to explicit resource policies.
-    const microsoftScopes: Entry10.MicrosoftProviderOptions = { ...microsoftOptions, identityScopes: ["https://graph.microsoft.com/User.Read"] };
+    const microsoftScopes: MicrosoftOptions = { ...microsoftOptions, identityScopes: ["https://graph.microsoft.com/User.Read"] };
     void [microsoftProvider, microsoftCache, microsoftRedirect, microsoftScopes];
-    const googleOptions: Entry11.GoogleProviderOptions = { id: "google", clientId: "client", clientSecret: "secret", hostedDomain: "example.com", resources: [{ resource: "https://www.googleapis.com", scopes: ["https://www.googleapis.com/auth/drive.readonly"] }] };
+    const googleOptions: GoogleOptions = { id: "google", clientId: "client", clientSecret: "secret", hostedDomain: "example.com", resources: [{ resource: "https://www.googleapis.com", scopes: ["https://www.googleapis.com/auth/drive.readonly"] }] };
     const googleProvider: Entry8.ProviderDefinition = Entry11.createGoogleProvider(googleOptions);
     // @ts-expect-error Browser SDK cache configuration is not a server preset option.
-    const googleCache: Entry11.GoogleProviderOptions = { ...googleOptions, cacheLocation: "localstorage" };
+    const googleCache: GoogleOptions = { ...googleOptions, cacheLocation: "localstorage" };
     // @ts-expect-error App callback routing belongs to the shared engine.
-    const googleRedirect: Entry11.GoogleProviderOptions = { ...googleOptions, redirectUri: "https://app.test/callback" };
+    const googleRedirect: GoogleOptions = { ...googleOptions, redirectUri: "https://app.test/callback" };
     // @ts-expect-error Google offline access is an authorization parameter, not an OIDC scope.
-    const googleOffline: Entry11.GoogleProviderOptions = { ...googleOptions, identityScopes: ["openid", "offline_access"] };
+    const googleOffline: GoogleOptions = { ...googleOptions, identityScopes: ["openid", "offline_access"] };
     void [googleProvider, googleCache, googleRedirect, googleOffline];
-    const appleOptions: Entry12.AppleProviderOptions = { id: "apple", servicesId: "com.example.web", teamId: "TEAM123456", keyId: "KEY1234567", privateKey: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" } };
+    const appleOptions: AppleOptions = { id: "apple", servicesId: "com.example.web", teamId: "TEAM123456", keyId: "KEY1234567", privateKey: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" } };
     const appleProvider: Entry8.ProviderDefinition = Entry12.createAppleProvider(appleOptions);
     // @ts-expect-error Apple exposes no API resource policy.
-    const appleResources: Entry12.AppleProviderOptions = { ...appleOptions, resources: [] };
+    const appleResources: AppleOptions = { ...appleOptions, resources: [] };
     // @ts-expect-error App callback routing belongs to the shared engine.
-    const appleRedirect: Entry12.AppleProviderOptions = { ...appleOptions, redirectUri: "https://app.test/callback" };
+    const appleRedirect: AppleOptions = { ...appleOptions, redirectUri: "https://app.test/callback" };
     // @ts-expect-error Private keys are supplied by server code, never loaded by the preset.
-    const appleKeyPath: Entry12.AppleProviderOptions = { ...appleOptions, privateKeyPath: "key.p8" };
+    const appleKeyPath: AppleOptions = { ...appleOptions, privateKeyPath: "key.p8" };
     // @ts-expect-error The server secret cache has no public policy knob.
-    const appleCache: Entry12.AppleProviderOptions = { ...appleOptions, cacheTtl: 300 };
+    const appleCache: AppleOptions = { ...appleOptions, cacheTtl: 300 };
     void [appleProvider, appleResources, appleRedirect, appleKeyPath, appleCache];
     const totp: Entry5.VerifyTotpOptions = { secret: 'secret', code: '123456', at: new Date() };
     const algorithm: Entry5.CoseAlgorithm = -7;
@@ -170,7 +213,7 @@ try {
   execFileSync(
     process.execPath,
     [join(root, "node_modules/typescript/bin/tsc"), "-p", "tsconfig.json"],
-    { cwd: consumer, stdio: "pipe" },
+    { cwd: consumer, stdio: "pipe", encoding: "utf8" },
   );
   const fixture = join(consumer, "fixture.ts");
   const program = ts.createProgram([fixture], {
@@ -192,6 +235,15 @@ try {
       getNewLine: () => "\n",
     }),
   );
+  const counts = {
+    pairs: contract.entrypoints.reduce(
+      (sum, entry) => sum + entry.values.length + entry.types.length,
+      0,
+    ),
+    values: contract.entrypoints.reduce((sum, entry) => sum + entry.values.length, 0),
+    types: contract.entrypoints.reduce((sum, entry) => sum + entry.types.length, 0),
+  };
+  assert.deepEqual(counts, contract.declarationCounts);
   const checker = program.getTypeChecker();
   for (const entry of contract.entrypoints) {
     const declaration = program

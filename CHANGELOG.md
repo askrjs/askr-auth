@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking changes
 
+- Internalize nine develop-only server/preset type exports: `ProviderTokenRequest`, `ProviderLoginRequest`, `ProviderLogoutRequest`, `ProviderCapabilities`, `ProviderClientAuthentication`, `Auth0ProviderOptions`, `MicrosoftProviderOptions`, `GoogleProviderOptions`, and `AppleProviderOptions`. Derive their unchanged shapes from retained methods, `ProviderDefinition`, or preset factories; see the [type migration](docs/0.5.0-api.md#method-and-factory-type-ownership). The final surface is 92 entrypoint/name pairs (33 values, 59 types); runtime behavior and factories are unchanged.
+
 - Remove ten JWT/OIDC, CBOR/COSE and browser encoding implementation names from public entrypoints. See [every removal and replacement](docs/0.5.0-api.md). Keep the low-level OIDC/passkey entries and the public `CoseAlgorithm` credential contract; the separate browser-session retirement is described below.
 
 - Remove `@askrjs/auth/browser` and withdraw the develop-only `@askrjs/auth/auth0` SDK adapter, their browser-held session types/implementations, private SPA examples and optional Auth0 SPA SDK dependency. Migrate application sign-in to Server provider auth plus Core session binding; retain `/oidc`, `/webauthn-client` and native `/providers/auth0`. See the [breaking migration](docs/0.5.0-api.md#browser-session-migration).
