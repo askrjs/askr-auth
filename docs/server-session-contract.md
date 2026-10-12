@@ -183,6 +183,13 @@ until the maximum credential/transaction expiry plus accepted clock skew.
 An old revision cannot recreate a retired or removed record. Store adapters
 must not silently fall back to process memory after a connection failure.
 
+The `authority:<id>` lock serializes final cached/renewed access-token validation
+and synchronous delivery staging with logout and identity replacement. A store
+read may capture a record before its promise resolves; a last read alone cannot
+fence retirement. If retirement wins this lock, delivery fails. If delivery wins,
+its validation and staging finish before retirement can proceed. Logout cannot
+recall a token whose delivery already won this ordering.
+
 `withLock` serializes the SAME refresh-token grant family across resources and
 scope sets, while the acquisition promise cache deduplicates each exact token
 key. The adapter MUST preserve exclusivity until the operation callback settles,

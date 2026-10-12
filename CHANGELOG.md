@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Coordinate final cached and renewed server token delivery with shared-store logout and identity replacement, including delayed authority-read responses.
 - Reject non-finite session/JWT clocks and timed issuance whose expiration cannot advance.
 - Reject invalid SAML clocks, time policies and request lifetimes before returning or consuming authentication state.
 - Reject invalid TOTP timestamps and skip drift counters outside the non-negative safe integer range.
