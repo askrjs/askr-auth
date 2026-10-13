@@ -90,9 +90,10 @@ try {
   const grants = f.requests.filter(
     (request) => request.fields.get("grant_type") === "refresh_token",
   );
+  // Independent resource renewals may acquire the shared rotation lock in either order.
   assert.deepEqual(
-    grants.map((request) => request.fields.get("audience")),
-    [first, second],
+    grants.map((request) => request.fields.get("audience")).sort(),
+    [first, second].sort(),
   );
   assert.deepEqual(
     grants.map((request) => request.fields.get("refresh_token")),
