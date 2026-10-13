@@ -198,7 +198,10 @@ it("keys grants by audience and rotates the one refresh family across audiences"
   const refreshes = f.requests.filter(
     (request) => request.fields.get("grant_type") === "refresh_token",
   );
-  expect(refreshes.map((request) => request.fields.get("audience"))).toEqual([first, second]);
+  // Concurrent renewals share one rotating token family; audience arrival order is unspecified.
+  expect(refreshes.map((request) => request.fields.get("audience")).sort()).toEqual(
+    [first, second].sort(),
+  );
   expect(refreshes.map((request) => request.fields.get("refresh_token"))).toEqual([
     "REFRESH_2",
     "ROTATED_1",
