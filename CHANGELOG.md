@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reject invalid TOTP timestamps and skip drift counters outside the non-negative safe integer range.
 - Bind an explicit OIDC authorized party to the configured client even for a single audience, and reject additional audiences without configured trust.
 - Dispatch npm artifact checks through Node on Windows.
+- Limit OIDC discovery, token and JWKS bodies to 1 MiB of streamed decoded bytes; enforce the provider-session token's existing 128 KiB text limit during streaming and cancel reads on overflow or abort.
 
 ### Development
 

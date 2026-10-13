@@ -647,9 +647,14 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
                 await current();
               });
               const metadata = await waitFor(
-                providerMetadata(provider, transport, async () => {
-                  await current();
-                }),
+                providerMetadata(
+                  provider,
+                  transport,
+                  async () => {
+                    await current();
+                  },
+                  signal,
+                ),
                 signal,
               );
               const attempt = randomString();
@@ -737,6 +742,7 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
                     transport,
                     now,
                     latest.value.principal!.subject!,
+                    signal,
                   ),
                   signal,
                 );
@@ -943,7 +949,10 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
         await currentTransaction(result.transaction, signal);
       };
       const transport = providerTransport(fetcher, signal, current);
-      const metadata = await waitFor(providerMetadata(provider, transport, current), signal);
+      const metadata = await waitFor(
+        providerMetadata(provider, transport, current, signal),
+        signal,
+      );
       await current();
       const authorization = new URL(metadata.authorization_endpoint);
       const protocol: Record<string, string> = {
@@ -1084,7 +1093,10 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
           throw new ProviderSessionError("invalid-callback");
         const profileHint = providerPolicy(provider).profileHint?.(fields.get("user"));
         const transport = providerTransport(fetcher, signal, current);
-        const metadata = await waitFor(providerMetadata(provider, transport, current), signal);
+        const metadata = await waitFor(
+          providerMetadata(provider, transport, current, signal),
+          signal,
+        );
         await current();
         const exchangeStart = now();
         const body = new URLSearchParams({
@@ -1115,6 +1127,8 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
             metadata.jwks_uri,
             transport,
             now,
+            undefined,
+            signal,
           ),
           signal,
         );
@@ -1292,7 +1306,7 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
                 };
                 const transport = providerTransport(fetcher, signal, current);
                 const metadata = await waitFor(
-                  providerMetadata(provider, transport, current),
+                  providerMetadata(provider, transport, current, signal),
                   signal,
                 );
                 await current();
@@ -1355,6 +1369,7 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
                       transport,
                       now,
                       latest.value.principal!.subject!,
+                      signal,
                     ),
                     signal,
                   );
@@ -1525,7 +1540,10 @@ export function createProviderSession(options: ProviderSessionOptions): Provider
           live();
           checkCancellation(signal);
         });
-        const metadata = await waitFor(providerMetadata(provider, transport), signal);
+        const metadata = await waitFor(
+          providerMetadata(provider, transport, undefined, signal),
+          signal,
+        );
         if (logoutOptions.revoke && retired) {
           const selected = retired.refreshToken
             ? [retired.refreshToken]

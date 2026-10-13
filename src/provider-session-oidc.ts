@@ -12,6 +12,11 @@ import { checkCancellation, waitFor } from "./provider-session-storage";
 import type { ProviderDefinition } from "./provider-session-types";
 import type { Principal } from "./model";
 import type { JsonWebKeySet } from "./jwt-types";
+import {
+  cancelResponseBody,
+  OidcResponseTooLargeError,
+  parseBoundedJsonResponse,
+} from "./oidc-response";
 
 export interface ValidatedProviderTokens {
   accessToken: string;
@@ -28,14 +33,22 @@ export function providerTransport(
   return async (input, init) => {
     checkCancellation(signal);
     await current();
+    let response: Response | undefined;
     try {
-      const response = await waitFor(
-        request(input, { ...init, redirect: "error", signal }),
-        signal,
-      );
+      const pending = Promise.resolve()
+        .then(() => {
+          checkCancellation(signal);
+          return request(input, { ...init, redirect: "error", signal });
+        })
+        .then((received) => {
+          if (signal.aborted) cancelResponseBody(received);
+          return received;
+        });
+      response = await waitFor(pending, signal);
       await current();
       return response;
     } catch (error) {
+      if (response) cancelResponseBody(response);
       checkCancellation(signal);
       if (error instanceof ProviderSessionError || error instanceof InteractionRequiredError)
         throw error;
@@ -47,11 +60,12 @@ export async function providerMetadata(
   provider: ProviderDefinition,
   request: typeof fetch,
   current: () => Promise<void> = async () => {},
+  signal?: AbortSignal,
 ) {
   const policy = providerPolicy(provider);
   let metadata;
   try {
-    metadata = await discoverOidcProvider(request, provider.issuer);
+    metadata = await discoverOidcProvider(request, provider.issuer, signal);
   } catch (error) {
     await current();
     if (
@@ -133,9 +147,12 @@ export async function exchangeProviderTokens(
   );
   let value: unknown;
   try {
-    const text = await waitFor(response.text(), signal);
-    if (text.length > 131_072) throw new Error();
-    value = JSON.parse(text);
+    value = await parseBoundedJsonResponse(response, {
+      // Preserve the previous Response.text().length boundary while enforcing it during reads.
+      maxBytes: 131_072 * 3,
+      maxCharacters: 131_072,
+      signal,
+    });
   } catch {
     checkCancellation(signal);
     throw new ProviderSessionError("provider-unavailable");
@@ -281,6 +298,7 @@ export async function validateProviderIdentity(
   request: typeof fetch,
   clock: () => number,
   previousSubject?: string,
+  signal?: AbortSignal,
 ): Promise<ValidatedProviderIdentity> {
   try {
     if (!idToken) throw new Error();
@@ -296,8 +314,18 @@ export async function validateProviderIdentity(
       clockSkewSeconds: 0,
       jwks: async () => {
         const response = await request(jwksUri);
-        if (!response.ok) throw new ProviderSessionError("provider-unavailable");
-        const value: unknown = await response.json();
+        if (!response.ok) {
+          cancelResponseBody(response);
+          throw new ProviderSessionError("provider-unavailable");
+        }
+        let value: unknown;
+        try {
+          value = await parseBoundedJsonResponse(response, { signal });
+        } catch (error) {
+          if (error instanceof OidcResponseTooLargeError)
+            throw new ProviderSessionError("provider-unavailable");
+          throw error;
+        }
         if (!value || typeof value !== "object" || !Array.isArray((value as JsonWebKeySet).keys))
           throw new ProviderSessionError("provider-unavailable");
         return value as JsonWebKeySet;
