@@ -1,0 +1,247 @@
+{
+  "declarationCounts": { "pairs": 92, "values": 33, "types": 59 },
+  "exportKeys": [
+    ".",
+    "./jwt",
+    "./mfa",
+    "./oidc",
+    "./package.json",
+    "./providers/apple",
+    "./providers/auth0",
+    "./providers/google",
+    "./providers/microsoft",
+    "./saml",
+    "./server",
+    "./webauthn-client"
+  ],
+  "entrypoints": [
+    {
+      "specifier": "@askrjs/auth",
+      "values": [
+        "allOf",
+        "anyOf",
+        "createAuth",
+        "requireAnonymous",
+        "requirePermission",
+        "requireRole",
+        "requireScope",
+        "requireUser"
+      ],
+      "types": [
+        "AuthContext",
+        "AuthDecision",
+        "AuthOptions",
+        "AuthRequirement",
+        "AuthResolver",
+        "AuthSession",
+        "Claim",
+        "Principal",
+        "PrincipalStore",
+        "SessionStore",
+        "TenantResolver"
+      ],
+      "removed": []
+    },
+    {
+      "specifier": "@askrjs/auth/jwt",
+      "values": [
+        "JwtValidationError",
+        "createJwtIssuer",
+        "createJwtSigner",
+        "createJwtValidator",
+        "issueTimedJwt"
+      ],
+      "types": [
+        "AskrJsonWebKey",
+        "JsonWebKeySet",
+        "JwksProvider",
+        "JwtIssueInput",
+        "JwtIssuer",
+        "JwtIssuerOptions",
+        "JwtSignInput",
+        "JwtSigner",
+        "JwtSignerOptions",
+        "JwtValidationErrorCode",
+        "JwtValidator",
+        "JwtValidatorOptions",
+        "TimedJwtInput"
+      ],
+      "removed": ["OidcIdTokenOptions", "validateOidcIdToken"]
+    },
+    {
+      "specifier": "@askrjs/auth/oidc",
+      "values": ["OidcClientError", "createOidcClient"],
+      "types": [
+        "OidcAuthorizationRequest",
+        "OidcAuthorizationRequestOptions",
+        "OidcClient",
+        "OidcClientErrorCode",
+        "OidcClientOptions",
+        "OidcCodeExchange",
+        "OidcCodeExchangeResult",
+        "OidcProviderMetadata",
+        "OidcTokenResponse"
+      ],
+      "removed": []
+    },
+    {
+      "specifier": "@askrjs/auth/saml",
+      "values": ["SamlValidationError", "createSamlServiceProvider"],
+      "types": [
+        "SamlPrincipal",
+        "SamlRequestStore",
+        "SamlServiceProvider",
+        "SamlServiceProviderOptions",
+        "SamlStoredRequest",
+        "SamlValidationErrorCode"
+      ],
+      "removed": []
+    },
+    {
+      "specifier": "@askrjs/auth/mfa",
+      "values": [
+        "MfaValidationError",
+        "createTotpProvisioningUri",
+        "generateTotpSecret",
+        "verifyTotpCode",
+        "verifyWebAuthnAuthentication",
+        "verifyWebAuthnRegistration"
+      ],
+      "types": [
+        "CoseAlgorithm",
+        "MfaValidationErrorCode",
+        "TotpAlgorithm",
+        "TotpOptions",
+        "TotpVerificationResult",
+        "VerifyTotpOptions",
+        "WebAuthnAuthenticationInput",
+        "WebAuthnRegistrationInput",
+        "WebAuthnRegistrationResult"
+      ],
+      "removed": [
+        "CborDecodeOptions",
+        "CborFirstResult",
+        "DecodedCosePublicKey",
+        "decodeCbor",
+        "decodeCborFirst",
+        "decodeCosePublicKey"
+      ]
+    },
+    {
+      "specifier": "@askrjs/auth/webauthn-client",
+      "values": ["createPasskey", "getPasskeyAssertion"],
+      "types": [
+        "CreatePasskeyOptions",
+        "GetPasskeyAssertionOptions",
+        "PasskeyAssertion",
+        "PasskeyRegistration"
+      ],
+      "removed": ["decodeBase64Url", "encodeBase64Url"]
+    },
+    {
+      "specifier": "@askrjs/auth/server",
+      "values": [
+        "InteractionRequiredError",
+        "ProviderSessionError",
+        "createOidcProvider",
+        "createProviderSession"
+      ],
+      "types": [
+        "OidcProviderOptions",
+        "ProviderDefinition",
+        "ProviderSession",
+        "ProviderSessionErrorCode",
+        "ProviderSessionOptions",
+        "ProviderSessionRecord",
+        "ProviderSessionStore"
+      ],
+      "removed": [
+        "ProviderTokenRequest",
+        "ProviderLoginRequest",
+        "ProviderLogoutRequest",
+        "ProviderCapabilities",
+        "ProviderClientAuthentication"
+      ]
+    },
+    {
+      "specifier": "@askrjs/auth/providers/auth0",
+      "values": ["createAuth0Provider"],
+      "types": [],
+      "removed": ["Auth0ProviderOptions"]
+    },
+    {
+      "specifier": "@askrjs/auth/providers/microsoft",
+      "values": ["createMicrosoftProvider"],
+      "types": [],
+      "removed": ["MicrosoftProviderOptions"]
+    },
+    {
+      "specifier": "@askrjs/auth/providers/google",
+      "values": ["createGoogleProvider"],
+      "types": [],
+      "removed": ["GoogleProviderOptions"]
+    },
+    {
+      "specifier": "@askrjs/auth/providers/apple",
+      "values": ["createAppleProvider"],
+      "types": [],
+      "removed": ["AppleProviderOptions"]
+    }
+  ],
+  "privateSubpaths": [
+    "index",
+    "cbor",
+    "cose",
+    "jwt-validator",
+    "jwt-types",
+    "jwt-clock",
+    "jwt-encoding",
+    "oidc-id-token",
+    "webauthn-client-encoding",
+    "saml-response",
+    "saml-client",
+    "src/index.ts",
+    "dist/index.js",
+    "dist/jwt.js",
+    "dist/mfa.js",
+    "dist/cbor.js",
+    "providers/microsoft.js",
+    "src/providers/microsoft.ts",
+    "dist/providers/microsoft.js",
+    "providers/google.js",
+    "src/providers/google.ts",
+    "dist/providers/google.js",
+    "providers/apple.js",
+    "src/providers/apple.ts",
+    "dist/providers/apple.js",
+    "browser-types",
+    "browser-transport",
+    "src/browser.ts",
+    "src/browser-types.ts",
+    "src/browser-transport.ts",
+    "src/auth0.ts",
+    "dist/browser.js",
+    "dist/browser.d.ts",
+    "dist/browser-types.js",
+    "dist/browser-transport.js",
+    "dist/auth0.js",
+    "dist/auth0.d.ts"
+  ],
+  "retiredEntrypoints": [
+    {
+      "specifier": "@askrjs/auth/browser",
+      "values": ["BrowserOidcSessionError", "createBrowserOidcSession"],
+      "types": [
+        "BrowserOidcSession",
+        "BrowserOidcSessionErrorCode",
+        "BrowserOidcSessionOptions",
+        "BrowserOidcSessionResult"
+      ]
+    },
+    {
+      "specifier": "@askrjs/auth/auth0",
+      "values": ["createAuth0Session"],
+      "types": ["Auth0SessionOptions"]
+    }
+  ]
+}

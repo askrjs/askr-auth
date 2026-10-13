@@ -3,10 +3,11 @@ import { readFileSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 import { readPackRecord } from "./pack-result.js";
 
-const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+const npmCli = process.env.npm_execpath;
+if (!npmCli) throw new Error("Run artifact checks through npm run pack:check.");
 const packRecord = readPackRecord(
   JSON.parse(
-    execFileSync(npm, ["pack", "--ignore-scripts", "--dry-run", "--json"], {
+    execFileSync(process.execPath, [npmCli, "pack", "--ignore-scripts", "--dry-run", "--json"], {
       encoding: "utf8",
     }),
   ),
@@ -20,8 +21,20 @@ for (const required of [
   "dist/jwt.d.ts",
   "dist/oidc.js",
   "dist/oidc.d.ts",
-  "dist/browser.js",
-  "dist/browser.d.ts",
+  "dist/server.js",
+  "dist/server.d.ts",
+  "dist/providers/auth0.js",
+  "dist/providers/auth0.d.ts",
+  "docs/providers-auth0.md",
+  "dist/providers/microsoft.js",
+  "dist/providers/microsoft.d.ts",
+  "docs/providers-microsoft.md",
+  "dist/providers/google.js",
+  "dist/providers/google.d.ts",
+  "docs/providers-google.md",
+  "dist/providers/apple.js",
+  "dist/providers/apple.d.ts",
+  "docs/providers-apple.md",
   "dist/saml.js",
   "dist/saml.d.ts",
   "dist/mfa.js",
@@ -31,6 +44,19 @@ for (const required of [
 ]) {
   if (!packedFiles.has(normalize(required)))
     throw new Error(`Packed artifact is missing ${required}.`);
+}
+for (const file of packRecord.files) {
+  if (
+    /^dist\/(?:browser(?:-types|-transport)?|auth0)(?:[.-]|$)/u.test(file.path) ||
+    ["docs/browser-session.md", "docs/auth0-session.md"].includes(file.path) ||
+    /^examples\/(?:browser-session|auth0-session)\//u.test(file.path)
+  )
+    throw new Error(`Packed artifact contains retired browser session file ${file.path}.`);
+  if (
+    /\.(?:js|d\.ts)$/u.test(file.path) &&
+    readFileSync(file.path, "utf8").includes("@auth0/auth0-spa-js")
+  )
+    throw new Error(`Packed artifact still references the retired Auth0 SPA SDK in ${file.path}.`);
 }
 const sourceMappingPattern = /[#@]\s*sourceMappingURL=([^\s*]+)/gu;
 

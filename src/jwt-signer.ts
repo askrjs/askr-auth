@@ -1,4 +1,5 @@
 import { resolveJwtAlgorithm } from "./jwt-algorithm";
+import { readJwtClock } from "./jwt-clock";
 import type { AskrJsonWebKey } from "./jwt-types";
 
 /** Private-key configuration for a JWT signer. */
@@ -91,7 +92,10 @@ export async function issueTimedJwt(signer: JwtSigner, input: TimedJwtInput): Pr
     throw new TypeError("Timed JWT TTL must be a positive integer.");
   for (const key of Object.keys(input.claims ?? {}))
     if (timedClaims.has(key)) throw new TypeError(`JWT claim ${key} is framework-owned.`);
-  const now = (input.clock ?? (() => Math.floor(Date.now() / 1000)))();
+  const now = readJwtClock(input.clock);
+  const expiresAt = now + input.ttlSeconds;
+  if (!Number.isFinite(expiresAt) || expiresAt <= now)
+    throw new TypeError("Timed JWT lifetime must produce a finite expiration after issuance.");
   return signer.sign({
     protectedHeader: { typ: input.typ },
     claims: {
@@ -100,7 +104,7 @@ export async function issueTimedJwt(signer: JwtSigner, input: TimedJwtInput): Pr
       sub: input.subject,
       aud: input.audience,
       iat: now,
-      exp: now + input.ttlSeconds,
+      exp: expiresAt,
       jti: crypto.randomUUID(),
     },
   });

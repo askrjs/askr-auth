@@ -2,17 +2,12 @@ import { audienceMatches, claimTime, normalizePrincipal } from "./jwt-claims";
 import { decodeBase64Url, decodeJson } from "./jwt-encoding";
 import { JwtValidationError } from "./jwt-error";
 import { resolveJwtAlgorithm } from "./jwt-algorithm";
-import type { Principal } from "./model";
-import type {
-  JwtValidator,
-  JwtValidatorOptions,
-  JsonWebKeySet,
-  OidcIdTokenOptions,
-} from "./jwt-types";
+import { readJwtClock } from "./jwt-clock";
+import type { JwtValidator, JwtValidatorOptions, JsonWebKeySet } from "./jwt-types";
 
 /** Create a JWT validator with issuer, audience, key-refresh, and clock policy. @param options Validation policy. @returns Configured JWT validator. */
 export function createJwtValidator(options: JwtValidatorOptions): JwtValidator {
-  const clock = options.clock ?? (() => Math.floor(Date.now() / 1000));
+  const clock = () => readJwtClock(options.clock);
   const skew = options.clockSkewSeconds ?? 0;
   if (!Number.isFinite(skew) || skew < 0)
     throw new TypeError("JWT clockSkewSeconds must be a non-negative number.");
@@ -38,12 +33,14 @@ export function createJwtValidator(options: JwtValidatorOptions): JwtValidator {
         });
     }
     const keys = await refreshPromise;
+    const refreshedAt = clock();
     cachedKeys = keys;
-    lastRefresh = clock();
+    lastRefresh = refreshedAt;
     return keys;
   };
   return {
     async validate(token) {
+      clock();
       if (token.length > 65_536)
         throw new JwtValidationError("malformed_token", "JWT exceeds the 64 KiB size limit.");
       const parts = token.split(".");
@@ -143,20 +140,4 @@ export function createJwtValidator(options: JwtValidatorOptions): JwtValidator {
       return normalizePrincipal(payload);
     },
   };
-}
-
-/** Validate an OIDC ID token, including its nonce claim. @param token Compact serialized ID token. @param options OIDC validation policy. @returns Validated principal claims. */
-export async function validateOidcIdToken(
-  token: string,
-  options: OidcIdTokenOptions,
-): Promise<Principal> {
-  const { nonce, ...jwtOptions } = options;
-  const principal = await createJwtValidator(jwtOptions).validate(token);
-  if (principal.nonce !== nonce)
-    throw new JwtValidationError("invalid_claim", "OIDC ID token nonce is invalid.");
-  const payload = principal as Record<string, unknown>;
-  const audience = payload.aud;
-  if (Array.isArray(audience) && audience.length > 1 && payload.azp !== options.audience)
-    throw new JwtValidationError("invalid_claim", "OIDC ID token authorized party is invalid.");
-  return principal;
 }

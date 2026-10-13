@@ -16,6 +16,9 @@ export async function createRequest(
   relayState?: string,
 ): Promise<{ url: string; requestId: string }> {
   const now = (options.clock ?? Date.now)();
+  const expiresAt = now + (options.requestTtlSeconds ?? 600) * 1000;
+  if (!Number.isFinite(new Date(expiresAt).getTime()) || expiresAt <= now)
+    throw new TypeError("SAML request lifetime must produce a valid expiration after creation.");
   const requestId = `_askr_${randomBytes(20).toString("hex")}`;
   const doc = new DOMImplementation().createDocument(NS.protocol, "samlp:AuthnRequest", null);
   const root = doc.documentElement;
@@ -40,11 +43,10 @@ export async function createRequest(
     const key = createPrivateKey({ key: options.signRequests.privateKey, format: "jwk" });
     query += `&Signature=${encode(sign("RSA-SHA256", Buffer.from(query), key).toString("base64"))}`;
   }
-  const ttl = (options.requestTtlSeconds ?? 600) * 1000;
   await options.requestStore.save({
     id: requestId,
     createdAt: now,
-    expiresAt: now + ttl,
+    expiresAt,
     ...(relayState === undefined ? {} : { relayState }),
   });
   const separator = options.idp.ssoUrl.includes("?") ? "&" : "?";

@@ -1,6 +1,6 @@
 import { JwtValidationError } from "./jwt-error";
 
-export function decodeBase64Url(value: string): Uint8Array {
+export function decodeBase64Url(value: string): Uint8Array<ArrayBuffer> {
   try {
     if (!/^[A-Za-z0-9_-]*$/u.test(value) || value.length % 4 === 1) throw new Error();
     const normalized = value.replaceAll("-", "+").replaceAll("_", "/");

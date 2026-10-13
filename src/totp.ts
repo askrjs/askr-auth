@@ -17,7 +17,7 @@ export interface VerifyTotpOptions extends TotpOptions {
   secret: string;
   /** User-entered one-time code. */
   code: string;
-  /** Verification time; defaults to the current time. */
+  /** Non-negative Unix time in milliseconds, or a valid Date. Defaults to the current time. */
   at?: number | Date;
   /** Number of adjacent periods accepted on either side. */
   window?: number;
@@ -55,11 +55,7 @@ function normalizeSecret(secret: string): string {
 function decodeSecret(secret: string): { bytes: Uint8Array; normalized: string } {
   const normalized = normalizeSecret(secret);
   const lengthRemainder = normalized.length % 8;
-  if (
-    !normalized ||
-    /[^A-Z2-7]/u.test(normalized) ||
-    ![0, 2, 4, 5, 7].includes(lengthRemainder)
-  )
+  if (!normalized || /[^A-Z2-7]/u.test(normalized) || ![0, 2, 4, 5, 7].includes(lengthRemainder))
     throw new MfaValidationError("malformed-input", "TOTP secret is not valid Base32.");
   let bits = 0,
     value = 0;
@@ -189,13 +185,20 @@ export async function verifyTotpCode(input: VerifyTotpOptions): Promise<TotpVeri
     throw new MfaValidationError("malformed-input", "TOTP window is invalid.");
   const timestamp = input.at instanceof Date ? input.at.getTime() : (input.at ?? Date.now());
   const counter = Math.floor(timestamp / 1000 / period);
+  if (!Number.isFinite(timestamp) || timestamp < 0 || !Number.isSafeInteger(counter))
+    throw new MfaValidationError(
+      "malformed-input",
+      "TOTP time must produce a non-negative safe counter.",
+    );
   let matched: { counter: number; drift: number } | undefined;
   for (let drift = -window; drift <= window; drift++) {
-    const candidate = await codeAt(secret, counter + drift, algorithm, digits);
+    const step = counter + drift;
+    if (step < 0 || !Number.isSafeInteger(step)) continue;
+    const candidate = await codeAt(secret, step, algorithm, digits);
     let difference = 0;
     for (let i = 0; i < digits; i++)
       difference |= candidate.charCodeAt(i) ^ input.code.charCodeAt(i);
-    if (difference === 0) matched = { counter: counter + drift, drift: drift === 0 ? 0 : drift };
+    if (difference === 0) matched = { counter: step, drift: drift === 0 ? 0 : drift };
   }
   return matched ? { valid: true, ...matched } : { valid: false };
 }

@@ -1,0 +1,437 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { access, mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import ts from "@typescript/typescript6";
+import { readPackRecord } from "./pack-result.js";
+
+const npmCli = process.env.npm_execpath;
+if (!npmCli) throw new Error("Run packed checks through npm run test:packed.");
+const root = process.cwd();
+const runNpm = (args, options) => execFileSync(process.execPath, [npmCli, ...args], options);
+const contract = JSON.parse(await readFile("tests/public-contract.json", "utf8"));
+const consumer = await mkdtemp(join(tmpdir(), "askr-auth-contract-"));
+try {
+  const packed = readPackRecord(
+    JSON.parse(
+      runNpm(["pack", "--ignore-scripts", "--json", "--pack-destination", consumer], {
+        encoding: "utf8",
+      }),
+    ),
+  );
+  await writeFile(
+    join(consumer, "package.json"),
+    JSON.stringify({ private: true, type: "module" }),
+  );
+  runNpm(
+    ["install", "--no-audit", "--no-fund", "--no-package-lock", join(consumer, packed.filename)],
+    { cwd: consumer, stdio: "pipe" },
+  );
+  await assert.rejects(access(join(consumer, "node_modules/@auth0/auth0-spa-js")));
+  const manifest = JSON.parse(
+    await readFile(join(consumer, "node_modules/@askrjs/auth/package.json"), "utf8"),
+  );
+  assert.deepEqual(Object.keys(manifest.exports).sort(), contract.exportKeys);
+  for (const field of [
+    "dependencies",
+    "devDependencies",
+    "optionalDependencies",
+    "peerDependencies",
+    "peerDependenciesMeta",
+  ])
+    assert.equal(Object.hasOwn(manifest[field] ?? {}, "@auth0/auth0-spa-js"), false, field);
+  const installedGraph = JSON.parse(
+    runNpm(["ls", "--all", "--json"], { cwd: consumer, encoding: "utf8" }),
+  );
+  const assertSdkAbsent = (node) => {
+    for (const [name, dependency] of Object.entries(node.dependencies ?? {})) {
+      assert.notEqual(
+        name,
+        "@auth0/auth0-spa-js",
+        "Retired SDK must be absent at every installed graph depth.",
+      );
+      assertSdkAbsent(dependency);
+    }
+  };
+  assertSdkAbsent(installedGraph);
+  // Preserve the existing declaration-owner aliases by explicit specifier;
+  // removing public entries must not silently change MFA/WebAuthn/provider owners.
+  const entryAliases = new Map([
+    ["@askrjs/auth", "Entry0"],
+    ["@askrjs/auth/jwt", "Entry1"],
+    ["@askrjs/auth/oidc", "Entry2"],
+    ["@askrjs/auth/saml", "Entry4"],
+    ["@askrjs/auth/mfa", "Entry5"],
+    ["@askrjs/auth/webauthn-client", "Entry6"],
+    ["@askrjs/auth/server", "Entry8"],
+    ["@askrjs/auth/providers/auth0", "Entry9"],
+    ["@askrjs/auth/providers/microsoft", "Entry10"],
+    ["@askrjs/auth/providers/google", "Entry11"],
+    ["@askrjs/auth/providers/apple", "Entry12"],
+  ]);
+  assert.deepEqual(
+    [...entryAliases.keys()].sort(),
+    contract.entrypoints.map((entry) => entry.specifier).sort(),
+  );
+  const deniedSpecifiers = [
+    ...contract.retiredEntrypoints.map((entry) => entry.specifier),
+    ...contract.privateSubpaths.map((path) => "@askrjs/auth/" + path),
+  ];
+  assert.equal(new Set(deniedSpecifiers).size, deniedSpecifiers.length);
+  const deniedImports = deniedSpecifiers
+    .map(
+      (specifier, index) =>
+        `// @ts-expect-error Retired or private entry must remain unavailable.\nimport * as Denied${index} from '${specifier}';`,
+    )
+    .join("\n");
+  await writeFile(join(consumer, "denied.mts"), deniedImports + "\n");
+  const imports = contract.entrypoints
+    .map((entry) => `import * as ${entryAliases.get(entry.specifier)} from '${entry.specifier}';`)
+    .join("\n");
+  const negatives = contract.entrypoints
+    .flatMap((entry, index) =>
+      entry.removed.map(
+        (name) =>
+          `// @ts-expect-error Removed public export must stay private.\nimport type { ${name} as Removed${index}_${name} } from '${entry.specifier}';`,
+      ),
+    )
+    .join("\n");
+  await writeFile(
+    join(consumer, "fixture.ts"),
+    `${imports}\n${negatives}
+    const principal: Entry0.Principal = { id: 'user', roles: ['admin'] };
+    const requirement: Entry0.AuthRequirement = Entry0.requireRole('admin');
+    const jwt: Entry1.JwtValidatorOptions = { issuer: 'issuer', jwks: { keys: [] }, clock: () => 0 };
+    const oidc: Entry2.OidcClientOptions = { issuer: 'https://issuer.test', clientId: 'client', redirectUri: 'https://app.test/callback' };
+    type Auth0Options = Parameters<typeof Entry9.createAuth0Provider>[0];
+    type MicrosoftOptions = Parameters<typeof Entry10.createMicrosoftProvider>[0];
+    type GoogleOptions = Parameters<typeof Entry11.createGoogleProvider>[0];
+    type AppleOptions = Parameters<typeof Entry12.createAppleProvider>[0];
+    type LoginOptions = Parameters<Entry8.ProviderSession["login"]>[1];
+    type LogoutOptions = NonNullable<Parameters<Entry8.ProviderSession["logout"]>[1]>;
+    type TokenOptions = Parameters<Entry8.ProviderSession["token"]>[2];
+    type Capabilities = Entry8.ProviderDefinition["capabilities"];
+    type ClientAuthentication = Entry8.ProviderDefinition["clientAuthentication"];
+    const authentication: ClientAuthentication = { method: "client_secret_post", secret: async ({ now, signal }) => {
+      const time: number = now;
+      const cancellation: AbortSignal = signal;
+      void [time, cancellation];
+      return "secret";
+    } };
+    const capabilities: Capabilities = { renewal: "refresh", incrementalConsent: true, providerLogout: false, revocation: false, resources: [{ resource: "https://api.test", scopes: ["read"] }] };
+    const login: LoginOptions = { provider: "auth0", returnTo: "/", resource: "https://api.test", scopes: ["read"] };
+    const logout: LogoutOptions = { revoke: true, providerLogout: false };
+    const token: TokenOptions = { resource: "https://api.test", scopes: ["read"], signal: new AbortController().signal };
+    // @ts-expect-error Request scopes retain their string element contract.
+    const invalidToken: TokenOptions = { scopes: [1] };
+    // @ts-expect-error Logout booleans are not truthy strings.
+    const invalidLogout: LogoutOptions = { revoke: "yes" };
+    // @ts-expect-error Login returnTo remains required.
+    const invalidLogin: LoginOptions = { provider: "auth0" };
+    // @ts-expect-error Only supported client authentication methods are allowed.
+    const invalidAuthentication: ClientAuthentication = { method: "none", secret: "secret" };
+    // @ts-expect-error Renewal policies remain a closed union.
+    const invalidCapabilities: Capabilities = { ...capabilities, renewal: "silent-iframe" };
+    // @ts-expect-error Provider resource scopes remain readonly.
+    capabilities.resources[0]!.scopes.push("write");
+    const generic = Entry8.createOidcProvider({ id: "generic", issuer: "https://issuer.test", clientId: "client", clientAuthentication: authentication, capabilities });
+    const contextual = Entry9.createAuth0Provider({ id: "contextual", domain: "tenant.auth0.com", clientId: "client", clientSecret: async ({ now, signal }) => {
+      const time: number = now;
+      const cancellation: AbortSignal = signal;
+      void [time, cancellation];
+      return "secret";
+    } });
+    // This is the annotation used by Server composition and generated CLI config.
+    const providerAuth = (): Entry8.ProviderSessionOptions => ({ origin: "https://app.test", providers: [generic, contextual], session: { secrets: ["secret"] } });
+    // @ts-expect-error Provider definitions remain factory-branded.
+    const copiedDefinition: Entry8.ProviderDefinition = { id: "copied", issuer: "https://issuer.test", clientId: "client", clientAuthentication: authentication, responseMode: "query", identityScopes: ["openid"], capabilities };
+    void [login, logout, token, invalidToken, invalidLogout, invalidLogin, invalidAuthentication, invalidCapabilities, copiedDefinition, providerAuth];
+    const nativeOptions: Auth0Options = { id: "auth0", domain: "tenant.auth0.com", clientId: "client", clientSecret: "secret", organization: "org_expected", organizationName: "acme", resources: [{ resource: "https://api.test", scopes: ["read:records"] }] };
+    const nativeProvider: Entry8.ProviderDefinition = Entry9.createAuth0Provider(nativeOptions);
+    // @ts-expect-error Browser SDK cache options do not configure the native server preset.
+    const nativeCache: Auth0Options = { ...nativeOptions, cacheLocation: "localstorage" };
+    // @ts-expect-error App callback routing belongs to the shared engine, not the preset.
+    const nativeRedirect: Auth0Options = { ...nativeOptions, redirectUri: "https://app.test/callback" };
+    // @ts-expect-error API permission scopes belong to an explicit resource policy.
+    const nativeScopes: Auth0Options = { ...nativeOptions, identityScopes: ["read:records"] };
+    void [nativeProvider, nativeCache, nativeRedirect, nativeScopes];
+    const microsoftOptions: MicrosoftOptions = { id: "microsoft", tenantId: "12345678-1234-1234-1234-123456789abc", clientId: "client", clientSecret: "secret", resources: [{ resource: "https://graph.microsoft.com", scopes: ["https://graph.microsoft.com/User.Read"] }] };
+    const microsoftProvider: Entry8.ProviderDefinition = Entry10.createMicrosoftProvider(microsoftOptions);
+    // @ts-expect-error Browser SDK cache configuration is not a server preset option.
+    const microsoftCache: MicrosoftOptions = { ...microsoftOptions, cacheLocation: "localstorage" };
+    // @ts-expect-error App callback routing belongs to the shared engine.
+    const microsoftRedirect: MicrosoftOptions = { ...microsoftOptions, redirectUri: "https://app.test/callback" };
+    // @ts-expect-error Qualified API permissions belong to explicit resource policies.
+    const microsoftScopes: MicrosoftOptions = { ...microsoftOptions, identityScopes: ["https://graph.microsoft.com/User.Read"] };
+    void [microsoftProvider, microsoftCache, microsoftRedirect, microsoftScopes];
+    const googleOptions: GoogleOptions = { id: "google", clientId: "client", clientSecret: "secret", hostedDomain: "example.com", resources: [{ resource: "https://www.googleapis.com", scopes: ["https://www.googleapis.com/auth/drive.readonly"] }] };
+    const googleProvider: Entry8.ProviderDefinition = Entry11.createGoogleProvider(googleOptions);
+    // @ts-expect-error Browser SDK cache configuration is not a server preset option.
+    const googleCache: GoogleOptions = { ...googleOptions, cacheLocation: "localstorage" };
+    // @ts-expect-error App callback routing belongs to the shared engine.
+    const googleRedirect: GoogleOptions = { ...googleOptions, redirectUri: "https://app.test/callback" };
+    // @ts-expect-error Google offline access is an authorization parameter, not an OIDC scope.
+    const googleOffline: GoogleOptions = { ...googleOptions, identityScopes: ["openid", "offline_access"] };
+    void [googleProvider, googleCache, googleRedirect, googleOffline];
+    const appleOptions: AppleOptions = { id: "apple", servicesId: "com.example.web", teamId: "TEAM123456", keyId: "KEY1234567", privateKey: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" } };
+    const appleProvider: Entry8.ProviderDefinition = Entry12.createAppleProvider(appleOptions);
+    // @ts-expect-error Apple exposes no API resource policy.
+    const appleResources: AppleOptions = { ...appleOptions, resources: [] };
+    // @ts-expect-error App callback routing belongs to the shared engine.
+    const appleRedirect: AppleOptions = { ...appleOptions, redirectUri: "https://app.test/callback" };
+    // @ts-expect-error Private keys are supplied by server code, never loaded by the preset.
+    const appleKeyPath: AppleOptions = { ...appleOptions, privateKeyPath: "key.p8" };
+    // @ts-expect-error The server secret cache has no public policy knob.
+    const appleCache: AppleOptions = { ...appleOptions, cacheTtl: 300 };
+    void [appleProvider, appleResources, appleRedirect, appleKeyPath, appleCache];
+    const totp: Entry5.VerifyTotpOptions = { secret: 'secret', code: '123456', at: new Date() };
+    const algorithm: Entry5.CoseAlgorithm = -7;
+    const challenge: Entry6.GetPasskeyAssertionOptions = { challenge: 'AQID', rpId: 'app.test' };
+    // @ts-expect-error An authenticated principal needs an application identity.
+    const missing: Entry0.Principal = {};
+    // @ts-expect-error Only supported WebAuthn key algorithms can be persisted.
+    const unsupported: Entry5.CoseAlgorithm = -999;
+    void [principal, requirement, jwt, oidc, totp, algorithm, challenge, missing, unsupported];
+  `,
+  );
+  await writeFile(
+    join(consumer, "tsconfig.json"),
+    JSON.stringify({
+      compilerOptions: {
+        target: "ES2022",
+        module: "NodeNext",
+        moduleResolution: "NodeNext",
+        strict: true,
+        noEmit: true,
+        types: [],
+        lib: ["ES2022", "DOM"],
+      },
+      files: ["fixture.ts", "denied.mts"],
+    }),
+  );
+  execFileSync(
+    process.execPath,
+    [join(root, "node_modules/typescript/bin/tsc"), "-p", "tsconfig.json"],
+    { cwd: consumer, stdio: "pipe", encoding: "utf8" },
+  );
+  const fixture = join(consumer, "fixture.ts");
+  const program = ts.createProgram([fixture], {
+    target: ts.ScriptTarget.ES2022,
+    module: ts.ModuleKind.NodeNext,
+    moduleResolution: ts.ModuleResolutionKind.NodeNext,
+    strict: true,
+    noEmit: true,
+    types: [],
+    lib: ["lib.es2022.d.ts", "lib.dom.d.ts"],
+  });
+  const diagnostics = ts.getPreEmitDiagnostics(program);
+  assert.equal(
+    diagnostics.length,
+    0,
+    ts.formatDiagnosticsWithColorAndContext(diagnostics, {
+      getCanonicalFileName: (file) => file,
+      getCurrentDirectory: () => consumer,
+      getNewLine: () => "\n",
+    }),
+  );
+  const counts = {
+    pairs: contract.entrypoints.reduce(
+      (sum, entry) => sum + entry.values.length + entry.types.length,
+      0,
+    ),
+    values: contract.entrypoints.reduce((sum, entry) => sum + entry.values.length, 0),
+    types: contract.entrypoints.reduce((sum, entry) => sum + entry.types.length, 0),
+  };
+  assert.deepEqual(counts, contract.declarationCounts);
+  const checker = program.getTypeChecker();
+  for (const entry of contract.entrypoints) {
+    const declaration = program
+      .getSourceFile(fixture)
+      .statements.find(
+        (statement) =>
+          ts.isImportDeclaration(statement) && statement.moduleSpecifier.text === entry.specifier,
+      );
+    const symbols = checker
+      .getExportsOfModule(checker.getSymbolAtLocation(declaration.moduleSpecifier))
+      .map((symbol) => symbol.name)
+      .sort();
+    assert.deepEqual(
+      symbols,
+      [...entry.values, ...entry.types].sort(),
+      `${entry.specifier} declaration surface`,
+    );
+  }
+  await writeFile(
+    join(consumer, "runtime.mjs"),
+    `
+    import assert from 'node:assert/strict';
+    import { generateKeyPairSync } from 'node:crypto';
+    // Node 26 provides its own Web Storage global; this consumer contract checks
+    // that the packed server package still works without browser storage.
+    Reflect.deleteProperty(globalThis, "sessionStorage");
+    assert.equal(typeof globalThis.window, "undefined");
+    assert.equal(typeof globalThis.document, "undefined");
+    assert.equal(typeof globalThis.sessionStorage, "undefined");
+    for (const entry of ${JSON.stringify(contract.entrypoints)}) {
+      const values = await import(entry.specifier);
+      assert.deepEqual(Object.keys(values).sort(), entry.values, entry.specifier);
+    }
+    for (const specifier of ${JSON.stringify(contract.retiredEntrypoints.map((entry) => entry.specifier))})
+      await assert.rejects(import(specifier), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
+    for (const path of ${JSON.stringify(contract.privateSubpaths)})
+      await assert.rejects(import('@askrjs/auth/' + path), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
+    const { createJwtIssuer, createJwtValidator } = await import('@askrjs/auth/jwt');
+    const pair = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const tokenIssuer = createJwtIssuer({ privateKey: pair.privateKey.export({ format: 'jwk' }), kid: 'key', issuer: 'issuer', audience: 'api', ttlSeconds: 60, clock: () => 100 });
+    const token = await tokenIssuer.issue({ subject: 'user', roles: ['admin'] });
+    assert.equal((await tokenIssuer.validator.validate(token)).id, 'user');
+    const keys = { keys: [{ ...pair.publicKey.export({ format: 'jwk' }), kid: 'key', alg: 'RS256' }] };
+    await assert.rejects(createJwtValidator({ issuer: 'issuer', jwks: keys, clock: () => NaN }).validate(token), TypeError);
+    await assert.rejects(createJwtValidator({ issuer: 'issuer', jwks: keys, clock: () => 160 }).validate(token), { code: 'invalid_claim' });
+    const { verifyTotpCode } = await import('@askrjs/auth/mfa');
+    const secret = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
+    assert.deepEqual(await verifyTotpCode({ secret, code: '755224', at: 0, window: 1 }), { valid: true, counter: 0, drift: 0 });
+    await assert.rejects(verifyTotpCode({ secret, code: '000000', at: NaN }), { code: 'malformed-input' });
+  `,
+  );
+  execFileSync(process.execPath, [join(consumer, "runtime.mjs")], { cwd: consumer, stdio: "pipe" });
+  // Reuse the owned HTTP provider with public installed entries only. PKCE is
+  // verified by a native SHA-256 oracle; no private implementation is copied.
+  const presetSource = (await readFile("tests/provider-preset-fixture.ts", "utf8"))
+    .replaceAll('"../src/jwt"', '"@askrjs/auth/jwt"')
+    .replaceAll('"../src/server"', '"@askrjs/auth/server"');
+  const presetRuntime = ts.transpileModule(presetSource, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  }).outputText;
+  const presetModule = ts.createSourceFile(
+    "preset-fixture.mjs",
+    presetRuntime,
+    ts.ScriptTarget.ES2022,
+  );
+  assert.deepEqual(
+    presetModule.statements
+      .filter(ts.isImportDeclaration)
+      .map((node) => node.moduleSpecifier.text)
+      .sort(),
+    ["@askrjs/auth/jwt", "@askrjs/auth/server", "node:assert/strict", "node:crypto", "node:http"],
+    "Installed HTTP fixture must import only public package entries and native Node modules.",
+  );
+  await writeFile(join(consumer, "preset-fixture.mjs"), presetRuntime);
+  await writeFile(
+    join(consumer, "provider-auth0-native.mjs"),
+    await readFile("tests/provider-auth0-native.mjs"),
+  );
+  execFileSync(process.execPath, [join(consumer, "provider-auth0-native.mjs")], {
+    cwd: consumer,
+    stdio: "pipe",
+  });
+  await writeFile(
+    join(consumer, "provider-microsoft-native.mjs"),
+    await readFile("tests/provider-microsoft-native.mjs"),
+  );
+  execFileSync(process.execPath, [join(consumer, "provider-microsoft-native.mjs")], {
+    cwd: consumer,
+    stdio: "pipe",
+  });
+  await writeFile(
+    join(consumer, "provider-google-native.mjs"),
+    await readFile("tests/provider-google-native.mjs"),
+  );
+  execFileSync(process.execPath, [join(consumer, "provider-google-native.mjs")], {
+    cwd: consumer,
+    stdio: "pipe",
+  });
+  const appleSource = (await readFile("tests/provider-apple-fixture.ts", "utf8"))
+    .replaceAll('"../src/jwt"', '"@askrjs/auth/jwt"')
+    .replaceAll('"../src/server"', '"@askrjs/auth/server"');
+  const appleRuntime = ts.transpileModule(appleSource, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  }).outputText;
+  const appleModule = ts.createSourceFile(
+    "apple-fixture.mjs",
+    appleRuntime,
+    ts.ScriptTarget.ES2022,
+  );
+  assert.deepEqual(
+    appleModule.statements
+      .filter(ts.isImportDeclaration)
+      .map((node) => node.moduleSpecifier.text)
+      .sort(),
+    ["@askrjs/auth/jwt", "@askrjs/auth/server", "node:assert/strict", "node:crypto", "node:http"],
+    "Installed Apple oracle must import public entries/native modules only.",
+  );
+  await writeFile(join(consumer, "apple-fixture.mjs"), appleRuntime);
+  await writeFile(
+    join(consumer, "provider-apple-native.mjs"),
+    await readFile("tests/provider-apple-native.mjs"),
+  );
+  execFileSync(process.execPath, [join(consumer, "provider-apple-native.mjs")], {
+    cwd: consumer,
+    stdio: "pipe",
+  });
+  // A stripped negative fixture must fail for every denied path under each
+  // actual compiler; successful directives alone are not the negative control.
+  const stripped = deniedImports.replace(/^\s*\/\/ @ts-expect-error[^\n]*\n/gmu, "");
+  await writeFile(join(consumer, "denied-stripped.mts"), stripped + "\n");
+  const deniedConfig = JSON.parse(await readFile(join(consumer, "tsconfig.json"), "utf8"));
+  deniedConfig.files = ["denied-stripped.mts"];
+  await writeFile(join(consumer, "tsconfig.denied.json"), JSON.stringify(deniedConfig));
+  const compilers = [];
+  for (const compiler of ["typescript", "@typescript/typescript6"]) {
+    const executable = join(root, "node_modules", compiler, "bin/tsc");
+    compilers.push(
+      execFileSync(process.execPath, [executable, "--version"], { encoding: "utf8" })
+        .trim()
+        .replace(/^Version /, ""),
+    );
+    execFileSync(process.execPath, [executable, "-p", "tsconfig.json"], {
+      cwd: consumer,
+      stdio: "pipe",
+    });
+    let negativeOutput;
+    try {
+      execFileSync(
+        process.execPath,
+        [executable, "-p", "tsconfig.denied.json", "--pretty", "false"],
+        { cwd: consumer, stdio: "pipe" },
+      );
+    } catch (error) {
+      assert.notEqual(error.status, 0);
+      negativeOutput = String(error.stdout ?? "") + String(error.stderr ?? "");
+    }
+    assert.notEqual(negativeOutput, undefined, "Stripped denied imports unexpectedly compiled.");
+    const codes = [...negativeOutput.matchAll(/\berror TS(\d+):/gu)].map((match) =>
+      Number(match[1]),
+    );
+    assert.equal(codes.length, deniedSpecifiers.length, negativeOutput);
+    assert.equal(
+      codes.every((code) => code === 2307),
+      true,
+      negativeOutput,
+    );
+    assert.equal(negativeOutput.includes("denied-stripped.mts"), true, negativeOutput);
+  }
+  console.log(
+    JSON.stringify({
+      declarationNames: contract.entrypoints.reduce(
+        (count, entry) => count + entry.values.length + entry.types.length,
+        0,
+      ),
+      removedNames: contract.entrypoints.reduce((count, entry) => count + entry.removed.length, 0),
+      privateSubpaths: contract.privateSubpaths.length,
+      compilers,
+      normalInstall: true,
+      nativeSdkAbsent: true,
+      nativeAuth0SignedHttp: true,
+      nativeMicrosoftSignedHttp: true,
+      nativeGoogleSignedHttp: true,
+      nativeAppleSignedHttp: true,
+      retiredEntrypoints: contract.retiredEntrypoints.map((entry) => entry.specifier),
+      strippedDeniedImports: deniedSpecifiers.length,
+      sdkAbsentFromManifestAndInstalledGraph: true,
+    }),
+  );
+} finally {
+  await rm(consumer, { recursive: true, force: true });
+}

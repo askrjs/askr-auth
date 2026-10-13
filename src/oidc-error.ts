@@ -1,5 +1,6 @@
 /** Stable failure codes for OIDC client operations. */
 export type OidcClientErrorCode =
+  | "invalid-authorization-params"
   | "discovery-failed"
   | "invalid-metadata"
   | "state-mismatch"

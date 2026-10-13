@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { readPackRecord } from "./pack-result.js";
 
 const record = { filename: "package.tgz", files: [{ path: "dist/index.js" }] };
 
 describe("npm pack JSON normalization", () => {
-  it.each([ [record], { "@askrjs/auth": record } ])(
+  it.each([[record], { "@askrjs/auth": record }])(
     "should read one artifact from the supported npm result shape",
     (result) => {
       expect(readPackRecord(result)).toBe(record);

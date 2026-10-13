@@ -25,6 +25,8 @@ export interface OidcClientOptions {
   redirectUri: string;
   /** Requested scopes. */
   scopes?: readonly string[];
+  /** Bounded provider-specific string parameters; protocol-owned parameters are rejected. */
+  authorizationParams?: Readonly<Record<string, string>>;
   /** Fetch implementation for provider requests. */
   fetch?: typeof fetch;
 }

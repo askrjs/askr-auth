@@ -1,6 +1,6 @@
 {
   "name": "@askrjs/auth",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "description": "Shared authentication contracts and request auth resolution for Askr",
   "keywords": [
     "askr",
@@ -27,7 +27,15 @@
   },
   "files": [
     "dist/**/*.js",
-    "dist/**/*.d.ts"
+    "dist/**/*.d.ts",
+    "CHANGELOG.md",
+    "docs/0.5.0-api.md",
+    "docs/0.5.0-hardening.md",
+    "docs/server-session-contract.md",
+    "docs/providers-auth0.md",
+    "docs/providers-microsoft.md",
+    "docs/providers-google.md",
+    "docs/providers-apple.md"
   ],
   "type": "module",
   "main": "./dist/index.js",
@@ -45,9 +53,13 @@
       "types": "./dist/oidc.d.ts",
       "import": "./dist/oidc.js"
     },
-    "./browser": {
-      "types": "./dist/browser.d.ts",
-      "import": "./dist/browser.js"
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    },
+    "./providers/auth0": {
+      "types": "./dist/providers/auth0.d.ts",
+      "import": "./dist/providers/auth0.js"
     },
     "./saml": {
       "types": "./dist/saml.d.ts",
@@ -61,7 +73,19 @@
       "types": "./dist/webauthn-client.d.ts",
       "import": "./dist/webauthn-client.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./providers/microsoft": {
+      "types": "./dist/providers/microsoft.d.ts",
+      "import": "./dist/providers/microsoft.js"
+    },
+    "./providers/google": {
+      "types": "./dist/providers/google.d.ts",
+      "import": "./dist/providers/google.js"
+    },
+    "./providers/apple": {
+      "types": "./dist/providers/apple.d.ts",
+      "import": "./dist/providers/apple.js"
+    }
   },
   "publishConfig": {
     "access": "public"
@@ -75,9 +99,12 @@
     "test:browser": "npm run build && playwright test",
     "test:publint": "publint",
     "pack:check": "node tests/package-artifacts.js",
-    "check": "npm run lint && npm run typecheck && npm test && npm run build && npm run test:publint && npm run pack:check",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build && npm run test:publint && npm run pack:check && npm run test:packed",
     "prepack": "npm run build",
-    "prepublishOnly": "npm run check"
+    "prepublishOnly": "npm run check",
+    "test:packed": "node tests/packed-contract.mjs",
+    "test:coverage": "vp test run -c vitest.config.ts --coverage",
+    "fmt": "vp fmt ."
   },
   "dependencies": {
     "@xmldom/xmldom": "0.9.12",
@@ -87,8 +114,10 @@
   "devDependencies": {
     "@playwright/test": "1.63.0",
     "@types/node": "^26.3.0",
+    "@typescript/typescript6": "npm:typescript@6.0.2",
+    "@vitest/coverage-v8": "4.1.11",
     "publint": "^0.3.24",
-    "typescript": "^7.0.2",
+    "typescript": "7.0.2",
     "vite-plus": "^0.3.1",
     "vitest": "^4.1.11"
   },

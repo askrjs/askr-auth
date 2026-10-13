@@ -1,4 +1,5 @@
-import type { CoseAlgorithm } from "./cose";
+/** Algorithm identifier persisted with a supported WebAuthn credential. */
+export type CoseAlgorithm = -7 | -257 | -8;
 
 /** Server-side WebAuthn registration ceremony data. */
 export interface WebAuthnRegistrationInput {

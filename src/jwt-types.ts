@@ -37,11 +37,6 @@ export interface JwtValidatorOptions {
   /** Duration for caching unknown-key failures. */
   unknownKeyCacheSeconds?: number;
 }
-/** OIDC-specific JWT validation options. */
-export interface OidcIdTokenOptions extends JwtValidatorOptions {
-  /** Expected OIDC nonce claim. */
-  nonce: string;
-}
 /** Stable failure codes returned by JWT validation. */
 export type JwtValidationErrorCode =
   | "malformed_token"
