@@ -5,6 +5,7 @@ import type {
   OidcTokenResponse,
 } from "./oidc-types";
 import { OidcClientError } from "./oidc-error";
+import { OidcResponseTooLargeError, parseBoundedJsonResponse } from "./oidc-response";
 
 /** Shared confidential-client request construction; token policy remains with its owner. */
 export async function requestOidcToken(
@@ -50,8 +51,14 @@ export async function exchangeOidcCode(
   );
   let value: unknown;
   try {
-    value = await response.json();
+    value = await parseBoundedJsonResponse(response);
   } catch (cause) {
+    if (cause instanceof OidcResponseTooLargeError && !response.ok)
+      throw new OidcClientError(
+        "exchange-failed",
+        `OIDC token exchange failed with HTTP ${response.status}.`,
+        { cause },
+      );
     throw new OidcClientError("invalid-token-response", "OIDC token response is not valid JSON.", {
       cause,
     });

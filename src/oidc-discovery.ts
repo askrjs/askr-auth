@@ -1,9 +1,15 @@
 import type { OidcProviderMetadata } from "./oidc-types";
 import { OidcClientError } from "./oidc-error";
+import { cancelResponseBody, parseBoundedJsonResponse } from "./oidc-response";
+
+function cancellationError(): DOMException {
+  return new DOMException("OIDC discovery was cancelled.", "AbortError");
+}
 
 export async function discoverOidcProvider(
   request: typeof fetch,
   issuer: string,
+  signal?: AbortSignal,
 ): Promise<OidcProviderMetadata> {
   try {
     const url = new URL(issuer);
@@ -17,19 +23,30 @@ export async function discoverOidcProvider(
   }
   let response: Response;
   try {
-    response = await request(`${issuer.replace(/\/$/u, "")}/.well-known/openid-configuration`);
+    response = await request(
+      `${issuer.replace(/\/$/u, "")}/.well-known/openid-configuration`,
+      signal ? { signal } : undefined,
+    );
   } catch (cause) {
+    if (signal?.aborted) throw cancellationError();
     throw new OidcClientError("discovery-failed", "OIDC discovery request failed.", { cause });
   }
-  if (!response.ok)
+  if (signal?.aborted) {
+    cancelResponseBody(response);
+    throw cancellationError();
+  }
+  if (!response.ok) {
+    cancelResponseBody(response);
     throw new OidcClientError(
       "discovery-failed",
       `OIDC discovery failed with HTTP ${response.status}.`,
     );
+  }
   let value: unknown;
   try {
-    value = await response.json();
+    value = await parseBoundedJsonResponse(response, { signal });
   } catch (cause) {
+    if (signal?.aborted) throw cancellationError();
     throw new OidcClientError("invalid-metadata", "OIDC discovery returned invalid JSON.", {
       cause,
     });

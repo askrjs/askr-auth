@@ -3,6 +3,7 @@ import { discoverOidcProvider } from "./oidc-discovery";
 import { exchangeOidcCode } from "./oidc-token";
 import { OidcClientError } from "./oidc-error";
 import { validateOidcIdToken } from "./oidc-id-token";
+import { cancelResponseBody, parseBoundedJsonResponse } from "./oidc-response";
 import { providerAuthorizationParams } from "./oidc-parameters";
 import type { JsonWebKeySet } from "./jwt-types";
 import type {
@@ -66,8 +67,11 @@ export function createOidcClient(options: OidcClientOptions): OidcClient {
       // treats the initial provider result as fresh and can then block key-rotation refresh.
       const jwks = async () => {
         const response = await request(discovered.jwks_uri);
-        if (!response.ok) throw new Error(`JWKS request failed with HTTP ${response.status}.`);
-        const value: unknown = await response.json();
+        if (!response.ok) {
+          cancelResponseBody(response);
+          throw new Error(`JWKS request failed with HTTP ${response.status}.`);
+        }
+        const value: unknown = await parseBoundedJsonResponse(response);
         if (!value || typeof value !== "object" || !Array.isArray((value as JsonWebKeySet).keys))
           throw new Error("JWKS response is invalid.");
         return value as JsonWebKeySet;
