@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 0.5.1 - 2026-11-01
+
+### Changed
+
+- Refresh the XML signature and encryption runtime dependencies to `xml-crypto`
+  6.4.0 and `xml-encryption` 6.0.2. No public API changes.
+
+### Development
+
+- Move first-party build and test tooling to Vite+ 1.4 and Vitest 5, and update
+  Playwright, TypeScript 6 compatibility, Node types, and package linting tools.
+
 ## 0.5.0 - 2026-10-10
 
 ### Breaking changes
