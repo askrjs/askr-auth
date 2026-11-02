@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { access, mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import ts from "@typescript/typescript6";
+import ts from "typescript";
 import { readPackRecord } from "./pack-result.js";
 
 const npmCli = process.env.npm_execpath;
@@ -212,7 +212,7 @@ try {
   );
   execFileSync(
     process.execPath,
-    [join(root, "node_modules/typescript/bin/tsc"), "-p", "tsconfig.json"],
+    [join(root, "node_modules/@typescript/native/bin/tsc"), "-p", "tsconfig.json"],
     { cwd: consumer, stdio: "pipe", encoding: "utf8" },
   );
   const fixture = join(consumer, "fixture.ts");
@@ -378,8 +378,11 @@ try {
   deniedConfig.files = ["denied-stripped.mts"];
   await writeFile(join(consumer, "tsconfig.denied.json"), JSON.stringify(deniedConfig));
   const compilers = [];
-  for (const compiler of ["typescript", "@typescript/typescript6"]) {
-    const executable = join(root, "node_modules", compiler, "bin/tsc");
+  for (const [compiler, bin] of [
+    ["@typescript/native", "tsc"],
+    ["typescript", "tsc6"],
+  ]) {
+    const executable = join(root, "node_modules", compiler, "bin", bin);
     compilers.push(
       execFileSync(process.execPath, [executable, "--version"], { encoding: "utf8" })
         .trim()
