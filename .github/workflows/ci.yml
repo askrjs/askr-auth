@@ -25,10 +25,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v7.1.0
         with:
           node-version: "lts/*"
           cache: npm
@@ -159,7 +159,7 @@ jobs:
 
       - name: Upload normal package archive and evidence
         if: ${{ always() && steps.normal-pack.outcome != 'skipped' }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: auth-normal-pack-${{ matrix.os }}-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/askr-auth-pack-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}/
