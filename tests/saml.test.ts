@@ -149,14 +149,14 @@ describe("SAML service provider", () => {
   );
 
   it.each([
-    { clockSkewSeconds: NaN },
-    { clockSkewSeconds: Infinity },
-    { clockSkewSeconds: -1 },
-    { maxAssertionAgeSeconds: NaN },
-    { maxAssertionAgeSeconds: -1 },
-    { requestTtlSeconds: Infinity },
-    { requestTtlSeconds: 0 },
-  ])("rejects invalid time policy %j", (options) => {
+    ["NaN clock skew", { clockSkewSeconds: NaN }],
+    ["infinite clock skew", { clockSkewSeconds: Infinity }],
+    ["negative clock skew", { clockSkewSeconds: -1 }],
+    ["NaN assertion age", { maxAssertionAgeSeconds: NaN }],
+    ["negative assertion age", { maxAssertionAgeSeconds: -1 }],
+    ["infinite request TTL", { requestTtlSeconds: Infinity }],
+    ["zero request TTL", { requestTtlSeconds: 0 }],
+  ] as const)("rejects invalid time policy: %s", (_label, options) => {
     expect(() => setup(new Store(), options)).toThrow(TypeError);
   });
 

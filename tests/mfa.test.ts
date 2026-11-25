@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import {
   createTotpProvisioningUri,
   generateTotpSecret,
@@ -107,7 +107,26 @@ describe("TOTP", () => {
   });
 
   it("should give at least 128 bits of entropy when a default secret is generated", () => {
-    expect(generateTotpSecret()).toHaveLength(32);
+    const originalCrypto = globalThis.crypto;
+    const supplied: number[][] = [];
+    vi.stubGlobal("crypto", {
+      getRandomValues<T extends ArrayBufferView>(array: T): T {
+        const bytes = new Uint8Array(array.buffer, array.byteOffset, array.byteLength);
+        supplied.push(Array.from({ length: bytes.length }, (_, index) => index + supplied.length));
+        bytes.set(supplied.at(-1)!);
+        return array;
+      },
+    });
+    try {
+      const first = generateTotpSecret();
+      const second = generateTotpSecret();
+      expect(supplied.map((bytes) => bytes.length)).toEqual([20, 20]);
+      expect(first).toBe("AAAQEAYEAUDAOCAJBIFQYDIOB4IBCEQT");
+      expect(second).toBe("AEBAGBAFAYDQQCIKBMGA2DQPCAIREEYU");
+      expect(first).not.toBe(second);
+    } finally {
+      vi.stubGlobal("crypto", originalCrypto);
+    }
   });
 
   it("should give malformed-input when a Base32 secret is invalid", async () => {

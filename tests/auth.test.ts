@@ -541,15 +541,27 @@ describe("JWT resource server", () => {
   });
 
   it("should resolve a rotated key through a key provider", async () => {
+    let calls = 0;
     const validator = createJwtValidator({
       issuer: validPayload.iss,
-      jwks: async () => jwks,
+      jwks: async () => {
+        calls += 1;
+        return calls === 1
+          ? { keys: [{ ...jwks.keys[0]!, kid: "key-0" }] }
+          : jwks;
+      },
+      jwksRefreshCooldownSeconds: 0,
       clock: () => now,
     });
+    await expect(validator.validate(token(validPayload, "key-0"))).resolves.toHaveProperty(
+      "id",
+      "user-1",
+    );
     await expect(validator.validate(token(validPayload, "key-1"))).resolves.toHaveProperty(
       "id",
       "user-1",
     );
+    expect(calls).toBe(2);
   });
 
   it("should resolve a bearer access token into the shared auth context", async () => {
