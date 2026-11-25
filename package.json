@@ -1,6 +1,6 @@
 {
   "name": "@askrjs/auth",
-  "version": "0.5.1",
+  "version": "0.5.0",
   "description": "Shared authentication contracts and request auth resolution for Askr",
   "keywords": [
     "askr",
@@ -112,18 +112,18 @@
     "xml-encryption": "6.0.2"
   },
   "devDependencies": {
-    "@playwright/test": "^1.65.1",
-    "@types/node": "^26.6.6",
-    "@typescript/native": "npm:typescript@^7.0.2",
-    "@vitest/coverage-v8": "5.1.0",
-    "publint": "^0.3.25",
-    "typescript": "npm:@typescript/typescript6@^6.0.2",
-    "vite-plus": "1.7.0",
-    "vitest": "5.1.0"
+    "@playwright/test": "1.63.0",
+    "@types/node": "^26.3.0",
+    "@typescript/typescript6": "npm:typescript@6.0.2",
+    "@vitest/coverage-v8": "5.0.5",
+    "publint": "^0.3.24",
+    "typescript": "7.0.2",
+    "vite-plus": "1.4.0",
+    "vitest": "5.0.5"
   },
   "overrides": {
-    "vite": "npm:@voidzero-dev/vite-plus-core@8.3.8000",
-    "vitest": "5.1.0"
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
+    "vitest": "5.0.5"
   },
   "engines": {
     "node": ">=24.0.0"
