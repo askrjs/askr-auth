@@ -288,6 +288,7 @@ function token(
   kid = "key-1",
   algorithm = "RS256",
   protectedHeader: Record<string, unknown> = {},
+  signingKey = keyPair.privateKey,
 ) {
   const header = base64url(JSON.stringify({ alg: algorithm, kid, typ: "JWT", ...protectedHeader }));
   const body = base64url(JSON.stringify(payload));
@@ -295,7 +296,7 @@ function token(
   const signature =
     algorithm === "none"
       ? ""
-      : sign("RSA-SHA256", Buffer.from(input), keyPair.privateKey).toString("base64url");
+      : sign("RSA-SHA256", Buffer.from(input), signingKey).toString("base64url");
   return `${input}.${signature}`;
 }
 
@@ -541,22 +542,23 @@ describe("JWT resource server", () => {
   });
 
   it("should resolve a rotated key through a key provider", async () => {
+    const previous = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const previousJwk = previous.publicKey.export({ format: "jwk" });
     let calls = 0;
     const validator = createJwtValidator({
       issuer: validPayload.iss,
       jwks: async () => {
         calls += 1;
         return calls === 1
-          ? { keys: [{ ...jwks.keys[0]!, kid: "key-0" }] }
+          ? { keys: [{ ...previousJwk, kid: "key-0", alg: "RS256", use: "sig" }] }
           : jwks;
       },
       jwksRefreshCooldownSeconds: 0,
       clock: () => now,
     });
-    await expect(validator.validate(token(validPayload, "key-0"))).resolves.toHaveProperty(
-      "id",
-      "user-1",
-    );
+    await expect(
+      validator.validate(token(validPayload, "key-0", "RS256", {}, previous.privateKey)),
+    ).resolves.toHaveProperty("id", "user-1");
     await expect(validator.validate(token(validPayload, "key-1"))).resolves.toHaveProperty(
       "id",
       "user-1",
